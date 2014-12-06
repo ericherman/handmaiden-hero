@@ -1,13 +1,13 @@
 #!/bin/bash
-rm -rf build
-mkdir -p build
+rm -rf gebouwd
+mkdir -p gebouwd
 
 unset CFLAGS
 unset CXXFLAGS
 
 gcc -std=c89 -Os -Wall -Wextra -pedantic -Werror -ggdb \
- -o build/handmaiden src/handmaiden.c
+ -o gebouwd/handmaiden src/handmaiden.c
 
 gcc -std=c89 -Os -Wall -Wextra -pedantic -Werror -ggdb \
- -o build/x11-example src/x11-example.c \
+ -o gebouwd/x11-example src/x11-example.c \
  -lX11
