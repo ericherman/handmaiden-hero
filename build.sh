@@ -1,3 +1,4 @@
 #!/bin/bash
-
-gcc -std=c89 -Os -Wall -Wextra -pedantic -Werror -o handmaiden src/handmaiden.c
+mkdir -p build
+gcc -std=c89 -Os -Wall -Wextra -pedantic -Werror -ggdb \
+ -o build/handmaiden src/handmaiden.c
