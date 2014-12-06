@@ -1,0 +1,10 @@
+2014-12-06
+commit f8447e9f is approximate parity with end of
+"Handmade Hero Day 001 - Setting Up the Windows Build"
+https://www.youtube.com/watch?v=Ee3EtYb8d1o
+
+I am not going to bother with windows, rather I will stay in linux land.
+
+However, the video included creating a "hello, world" style window program,
+so to mimic this, I modified an exmaple from geeks3d.com:
+http://www.geeks3d.com/20120102/programming-tutorial-simple-x11-x-window-code-sample-for-linux-and-mac-os-x/
