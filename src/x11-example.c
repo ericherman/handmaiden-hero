@@ -9,6 +9,7 @@
  * plus Changes:
  * Copyright (c) 2014 Eric Herman <eric@freesa.org>
  * 2014-12-06 Make code C89 compatible
+ * 2014-12-06 allow commandline to specify a string to display
  */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -70,8 +71,11 @@ int main(int argc, char **argv)
 #else
 			s1 = "X11 test app under Linux";
 #endif
-
-			s2 = "(C)2012 Geeks3D.com";
+			if (argc > 1) {
+				s2 = argv[1];
+			} else {
+				s2 = "(C)2012 Geeks3D.com";
+			}
 			XDrawString(dpy, win, DefaultGC(dpy, s), 10, y_offset,
 				    s1, strlen(s1));
 			y_offset += 20;
@@ -125,6 +129,10 @@ int main(int argc, char **argv)
 			len =
 			    XLookupString(&e.xkey, buf, sizeof buf, &keysym,
 					  NULL);
+			if (len == 0) {
+				/* what would this mean? */
+				fprintf(stderr,"len=%d after keypress\n", len);
+			}
 			if (keysym == XK_Escape)
 				break;
 		}
