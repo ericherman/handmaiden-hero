@@ -46,9 +46,9 @@ int main(int argc, char **argv)
 	XMapWindow(dpy, win);
 
 #if defined(__APPLE_CC__)
-	XStoreName(dpy, win, "Geeks3D.com - X11 window under Mac OS X (Lion)");
+	XStoreName(dpy, win, "Geeks3D.com - X11 window under Mac OS X");
 #else
-	XStoreName(dpy, win, "Geeks3D.com - X11 window under Linux (Mint 10)");
+	XStoreName(dpy, win, "Geeks3D.com - X11 window under Linux");
 #endif
 
 	WM_DELETE_WINDOW = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
