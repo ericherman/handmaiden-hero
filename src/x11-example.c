@@ -32,6 +32,7 @@ int main(int argc, char **argv)
 	XEvent e;
 	char *s1, *s2, buf[256];
 	KeySym keysym;
+	XWindowAttributes wa;
 
 	dpy = XOpenDisplay(NULL);
 	if (dpy == NULL) {
@@ -112,7 +113,6 @@ int main(int argc, char **argv)
 				y_offset += 20;
 			}
 
-			XWindowAttributes wa;
 			XGetWindowAttributes(dpy, win, &wa);
 			width = wa.width;
 			height = wa.height;
