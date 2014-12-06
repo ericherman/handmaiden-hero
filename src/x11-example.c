@@ -5,6 +5,10 @@
  * http://www.geeks3d.com/20120102/programming-tutorial-simple-x11-x-window-code-sample-for-linux-and-mac-os-x/
  *
  * Posted by JeGX - 2012/01/02 at 16:41
+ *
+ * plus Changes:
+ * Copyright (c) 2014 Eric Herman <eric@freesa.org>
+ * 2014-12-06 Make code C89 compatible
  */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -18,14 +22,24 @@
 
 int main(int argc, char **argv)
 {
-	Display *dpy = XOpenDisplay(NULL);
+	Display *dpy;
+	int s, ret, y_offset, height, width, len;
+	Window win;
+	Atom WM_DELETE_WINDOW;
+	unsigned char uname_ok;
+	struct utsname sname;
+	XEvent e;
+	char *s1, *s2, buf[256];
+	KeySym keysym;
+
+	dpy = XOpenDisplay(NULL);
 	if (dpy == NULL) {
 		fprintf(stderr, "Cannot open display\n");
 		exit(1);
 	}
 
-	int s = DefaultScreen(dpy);
-	Window win =
+	s = DefaultScreen(dpy);
+	win =
 	    XCreateSimpleWindow(dpy, RootWindow(dpy, s), 10, 10, 660, 200, 1,
 				BlackPixel(dpy, s), WhitePixel(dpy, s));
 	XSelectInput(dpy, win, ExposureMask | KeyPressMask);
@@ -37,29 +51,27 @@ int main(int argc, char **argv)
 	XStoreName(dpy, win, "Geeks3D.com - X11 window under Linux (Mint 10)");
 #endif
 
-	Atom WM_DELETE_WINDOW = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+	WM_DELETE_WINDOW = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
 	XSetWMProtocols(dpy, win, &WM_DELETE_WINDOW, 1);
 
-	bool uname_ok = false;
-	struct utsname sname;
-	int ret = uname(&sname);
+	uname_ok = 0;
+	ret = uname(&sname);
 	if (ret != -1) {
-		uname_ok = true;
+		uname_ok = 1;
 	}
 
-	XEvent e;
 	while (1) {
 		XNextEvent(dpy, &e);
 		if (e.type == Expose) {
-			int y_offset = 20;
+			y_offset = 20;
 
 #if defined(__APPLE_CC__)
-			const char *s1 = "X11 test app under Mac OS X Lion";
+			s1 = "X11 test app under Mac OS X Lion";
 #else
-			const char *s1 = "X11 test app under Linux";
+			s1 = "X11 test app under Linux";
 #endif
 
-			const char *s2 = "(C)2012 Geeks3D.com";
+			s2 = "(C)2012 Geeks3D.com";
 			XDrawString(dpy, win, DefaultGC(dpy, s), 10, y_offset,
 				    s1, strlen(s1));
 			y_offset += 20;
@@ -68,7 +80,7 @@ int main(int argc, char **argv)
 			y_offset += 20;
 
 			if (uname_ok) {
-				char buf[256] = { 0 };
+				buf[0] = '\0';
 
 				sprintf(buf, "System information:");
 				XDrawString(dpy, win, DefaultGC(dpy, s), 10,
@@ -98,9 +110,9 @@ int main(int argc, char **argv)
 
 			XWindowAttributes wa;
 			XGetWindowAttributes(dpy, win, &wa);
-			int width = wa.width;
-			int height = wa.height;
-			char buf[128] = { 0 };
+			width = wa.width;
+			height = wa.height;
+			buf[0] = '\0';
 			sprintf(buf, "Current window size: %dx%d", width,
 				height);
 			XDrawString(dpy, win, DefaultGC(dpy, s), 10, y_offset,
@@ -109,9 +121,8 @@ int main(int argc, char **argv)
 		}
 
 		if (e.type == KeyPress) {
-			char buf[128] = { 0 };
-			KeySym keysym;
-			int len =
+			buf[0] = '\0';
+			len =
 			    XLookupString(&e.xkey, buf, sizeof buf, &keysym,
 					  NULL);
 			if (keysym == XK_Escape)
@@ -119,8 +130,8 @@ int main(int argc, char **argv)
 		}
 
 		if ((e.type == ClientMessage) &&
-		    (static_cast < unsigned int >(e.xclient.data.l[0]) ==
-		     WM_DELETE_WINDOW)) {
+		    ((unsigned int)(e.xclient.data.l[0]) ==
+		     (unsigned int)WM_DELETE_WINDOW)) {
 			break;
 		}
 	}
