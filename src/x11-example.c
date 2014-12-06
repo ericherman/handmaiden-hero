@@ -1,3 +1,11 @@
+/**
+ * (C)2012 Geeks3D.com
+ *
+ * code copy-pasted from:
+ * http://www.geeks3d.com/20120102/programming-tutorial-simple-x11-x-window-code-sample-for-linux-and-mac-os-x/
+ *
+ * Posted by JeGX - 2012/01/02 at 16:41
+ */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
