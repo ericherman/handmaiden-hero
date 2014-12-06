@@ -75,7 +75,6 @@ int main(int argc, char *argv[])
 	/* the window becomes viewable */
 	XMapWindow(display, window);
 
-	/* the window becomes viewable */
 	only_if_exists = False;
 	WM_DELETE_WINDOW =
 	    XInternAtom(display, "WM_DELETE_WINDOW", only_if_exists);
@@ -117,6 +116,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* we probably do not need to do these next steps */
 	XDestroyWindow(display, window);
 	XCloseDisplay(display);
 
