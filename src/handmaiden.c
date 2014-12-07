@@ -21,7 +21,7 @@ struct virtual_window {
 };
 
 void redraw(Display *display, Window window, GC context,
-	    struct virtual_window *virtual_win, int *shutdown)
+	    struct virtual_window *virtual_win)
 {
 	XWindowAttributes window_attributes;
 	int x, y, vert_y, vert_x, offset;
@@ -30,16 +30,12 @@ void redraw(Display *display, Window window, GC context,
 
 	XGetWindowAttributes(display, window, &window_attributes);
 
-	y_ratio = virtual_win->height / (float) window_attributes.height;
-	x_ratio = virtual_win->width / (float) window_attributes.width;
+	y_ratio = virtual_win->height / (float)window_attributes.height;
+	x_ratio = virtual_win->width / (float)window_attributes.width;
 
 	for (y = 0; y < window_attributes.height; y++) {
 		vert_y = (int)(y * y_ratio);
 		for (x = 0; x < window_attributes.width; x++) {
-			if (*shutdown) {
-				fprintf(stderr, "incomplete redraw\n");
-				return;
-			}
 			vert_x = (int)(x * x_ratio);
 			offset = (vert_y * virtual_win->width) + vert_x;
 			foreground = *(virtual_win->pixels + offset);
@@ -55,6 +51,7 @@ int main(int argc, char *argv[])
 	char *display_name, buf[BUF_LEN];
 	Display *display;
 	Window parent;
+	XSetWindowAttributes window_attributes;
 	struct virtual_window *virtual_win;
 	int screen, x, y, shutdown, len;
 	unsigned int width, height, border_width, border, foreground;
@@ -97,7 +94,9 @@ int main(int argc, char *argv[])
 	}
 	virtual_win->height = height;
 	virtual_win->width = width;
-	virtual_win->pixels = malloc(virtual_win->height * virtual_win->width * sizeof(unsigned int));
+	virtual_win->pixels =
+	    malloc(virtual_win->height * virtual_win->width *
+		   sizeof(unsigned int));
 	if (!virtual_win->pixels) {
 		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
 		return 1;
@@ -106,16 +105,26 @@ int main(int argc, char *argv[])
 	for (y = 0; y < virtual_win->height; y++) {
 		for (x = 0; x < virtual_win->width; x++) {
 			foreground = ((x % 256) << 16) + (y % 256);
-			*(virtual_win->pixels + (y * virtual_win->width) + x) = foreground;
+			*(virtual_win->pixels + (y * virtual_win->width) + x) =
+			    foreground;
 		}
 	}
 
-	window = XCreateSimpleWindow(display, parent, x, y, width, height, border_width, border, background);
+	window =
+	    XCreateSimpleWindow(display, parent, x, y, width, height,
+				border_width, border, background);
 
 	if (!window) {
 		fprintf(stderr, "Could not XCreateSimpleWindow\n");
 		return 1;
 	}
+
+	/* Set window attributes such that off display pixels are preserved. */
+	window_attributes.backing_store = Always;
+	window_attributes.backing_pixel = BlackPixel(display, screen);
+	XChangeWindowAttributes(display, window,
+				CWBackingStore | CWBackingPixel,
+				&window_attributes);
 
 	/* let us accept keypresses */
 	XSelectInput(display, window, ExposureMask | KeyPressMask);
@@ -137,7 +146,7 @@ int main(int argc, char *argv[])
 		XNextEvent(display, &event);
 		switch (event.type) {
 		case Expose:
-			redraw(display, window, context, virtual_win, &shutdown);
+			redraw(display, window, context, virtual_win);
 			break;
 		case KeyPress:
 			buf[0] = '\0';
