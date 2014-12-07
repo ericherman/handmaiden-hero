@@ -20,13 +20,18 @@ struct virtual_window {
 	unsigned int *pixels;
 };
 
-void redraw(Display *display, Window window, GC context,
+void redraw(XExposeEvent *event, GC context,
 	    struct virtual_window *virtual_win)
 {
+	Display *display;
+	Window window;
 	XWindowAttributes window_attributes;
 	int x, y, vert_y, vert_x, offset;
 	float x_ratio, y_ratio;
 	unsigned int foreground;
+
+	display = event->display;
+	window = event->window;
 
 	XGetWindowAttributes(display, window, &window_attributes);
 
@@ -147,7 +152,7 @@ int main(int argc, char *argv[])
 		switch (event.type) {
 		case Expose:
 			XSync(display, True);
-			redraw(display, window, context, virtual_win);
+			redraw((XExposeEvent *)&event, context, virtual_win);
 			break;
 		case KeyPress:
 			buf[0] = '\0';
@@ -172,8 +177,8 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "WM_DELETE_WINDOW\n");
 			} else {
 				fprintf(stdout, "got ClientMessage: %u\n",
-					(unsigned int)(event.xclient.data.
-						       l[0]));
+					(unsigned int)(event.xclient.
+						       data.l[0]));
 			}
 			break;
 		default:
