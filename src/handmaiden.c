@@ -29,8 +29,8 @@ internal void fill_virtual(struct virtual_window virtual_win, int offset)
 
 	for (y = 0; y < virtual_win.height; y++) {
 		for (x = 0; x < virtual_win.width; x++) {
-			red = (x + offset) % 256;
-			blue = (y + offset) % 256;
+			red = x + offset; /* uint8_t means % 256 */
+			blue = y + offset;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
 			*(virtual_win.pixels + (y * virtual_win.width) + x) =
 			    foreground;
