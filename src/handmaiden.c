@@ -1,11 +1,17 @@
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
+/* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
+#define _GNU_SOURCE
+#include <sys/mman.h>
+/* end mmap includes */
+
+/* the X11 windowing system requires the following includes */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+/* end X11 */
 
 #include <stdio.h>		/* fprintf */
 #include <stdint.h>		/* unit8_t */
-#include <stdlib.h>		/* malloc */
 
 #define BUF_LEN 255
 
@@ -18,7 +24,9 @@
 struct virtual_window {
 	int height;
 	int width;
+	uint8_t bytes_per_pixel;
 	uint32_t *pixels;
+	size_t pixels_bytes_len;
 };
 
 internal void fill_virtual(struct virtual_window virtual_win, int offset)
@@ -29,7 +37,7 @@ internal void fill_virtual(struct virtual_window virtual_win, int offset)
 
 	for (y = 0; y < virtual_win.height; y++) {
 		for (x = 0; x < virtual_win.width; x++) {
-			red = x + offset; /* uint8_t means % 256 */
+			red = x + offset;	/* uint8_t means % 256 */
 			blue = y + offset;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
 			*(virtual_win.pixels + (y * virtual_win.width) + x) =
@@ -108,8 +116,14 @@ int main(int argc, char *argv[])
 
 	virtual_win.height = height;
 	virtual_win.width = width;
+	virtual_win.bytes_per_pixel = sizeof(uint32_t);
+	virtual_win.pixels_bytes_len =
+	    virtual_win.height * virtual_win.width *
+	    virtual_win.bytes_per_pixel;
+
 	virtual_win.pixels =
-	    malloc(virtual_win.height * virtual_win.width * sizeof(uint32_t));
+	    mmap(0, virtual_win.pixels_bytes_len, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (!virtual_win.pixels) {
 		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
 		return 1;
@@ -191,7 +205,7 @@ int main(int argc, char *argv[])
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
-		free(virtual_win.pixels);
+		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
 		XFreeGC(display, context);
 		XDestroyWindow(display, window);
 		XCloseDisplay(display);
