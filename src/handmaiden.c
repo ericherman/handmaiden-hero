@@ -99,8 +99,8 @@ int main(int argc, char *argv[])
 	parent = RootWindow(display, screen);
 	x = 0;
 	y = 0;
-	width = 255;
-	height = 255;
+	width = 640;
+	height = 480;
 	border_width = 1;
 	black = BlackPixel(display, screen);
 	border = black;
