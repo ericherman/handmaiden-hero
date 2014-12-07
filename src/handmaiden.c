@@ -21,25 +21,25 @@ struct virtual_window {
 	uint32_t *pixels;
 };
 
-internal void fill_virtual(struct virtual_window *virtual_win, int x_offset)
+internal void fill_virtual(struct virtual_window virtual_win, int x_offset)
 {
 	int x, y;
 	uint8_t red, blue;
 	uint32_t foreground;
 
-	for (y = 0; y < virtual_win->height; y++) {
-		for (x = 0; x < virtual_win->width; x++) {
+	for (y = 0; y < virtual_win.height; y++) {
+		for (x = 0; x < virtual_win.width; x++) {
 			red = (x + x_offset) % 256;
 			blue = y % 256;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
-			*(virtual_win->pixels + (y * virtual_win->width) + x) =
+			*(virtual_win.pixels + (y * virtual_win.width) + x) =
 			    foreground;
 		}
 	}
 }
 
 void redraw(Display *display, Window window, GC context,
-	    struct virtual_window *virtual_win)
+	    struct virtual_window virtual_win)
 {
 	XWindowAttributes window_attributes;
 	int x, y, vert_y, vert_x, offset;
@@ -48,15 +48,15 @@ void redraw(Display *display, Window window, GC context,
 
 	XGetWindowAttributes(display, window, &window_attributes);
 
-	y_ratio = virtual_win->height / (float)window_attributes.height;
-	x_ratio = virtual_win->width / (float)window_attributes.width;
+	y_ratio = virtual_win.height / (float)window_attributes.height;
+	x_ratio = virtual_win.width / (float)window_attributes.width;
 
 	for (y = 0; y < window_attributes.height; y++) {
 		vert_y = (int)(y * y_ratio);
 		for (x = 0; x < window_attributes.width; x++) {
 			vert_x = (int)(x * x_ratio);
-			offset = (vert_y * virtual_win->width) + vert_x;
-			foreground = *(virtual_win->pixels + offset);
+			offset = (vert_y * virtual_win.width) + vert_x;
+			foreground = *(virtual_win.pixels + offset);
 			XSetForeground(display, context, foreground);
 			XDrawPoint(display, window, context, x, y);
 		}
@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 	Display *display;
 	Window parent;
 	XSetWindowAttributes window_attributes;
-	struct virtual_window *virtual_win;
+	struct virtual_window virtual_win;
 	int screen, x, y, shutdown, len;
 	unsigned int width, height, border_width, border;
 	unsigned long background, black;
@@ -106,16 +106,10 @@ int main(int argc, char *argv[])
 	border = black;
 	background = black;
 
-	virtual_win = malloc(sizeof(struct virtual_window));
-	if (!virtual_win) {
-		fprintf(stderr, "Could not malloc virtual_window\n");
-		return 1;
-	}
-	virtual_win->height = height;
-	virtual_win->width = width;
-	virtual_win->pixels =
-	    malloc(virtual_win->height * virtual_win->width * sizeof(uint32_t));
-	if (!virtual_win->pixels) {
+	virtual_win.height = height;
+	virtual_win.width = width;
+	virtual_win.pixels = malloc(virtual_win.height * virtual_win.width * sizeof(uint32_t));
+	if (!virtual_win.pixels) {
 		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
 		return 1;
 	}
@@ -197,8 +191,7 @@ int main(int argc, char *argv[])
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
-		free(virtual_win->pixels);
-		free(virtual_win);
+		free(virtual_win.pixels);
 		XFreeGC(display, context);
 		XDestroyWindow(display, window);
 		XCloseDisplay(display);
