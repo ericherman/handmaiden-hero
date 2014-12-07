@@ -9,8 +9,8 @@
 
 #define BUF_LEN 255
 
+#define internal static
 /*
-#define internal_function static
 #define global_variable static
 #define local_persistant static
 */
@@ -21,7 +21,7 @@ struct virtual_window {
 	uint32_t *pixels;
 };
 
-void fill_virtual(struct virtual_window *virtual_win, int x_offset)
+internal void fill_virtual(struct virtual_window *virtual_win, int x_offset)
 {
 	int x, y;
 	uint8_t red, blue;
@@ -161,12 +161,14 @@ int main(int argc, char *argv[])
 			    (unsigned int)WM_DELETE_WINDOW) {
 				XSync(display, True);
 				shutdown = 1;
-				fprintf(stderr, "WM_DELETE_WINDOW\n");
+				if (0) {
+					fprintf(stderr, "WM_DELETE_WINDOW\n");
+				}
 				break;
 			} else {
 				fprintf(stdout, "got ClientMessage: %u\n",
-					(unsigned int)(event.xclient.
-						       data.l[0]));
+					(unsigned int)(event.xclient.data.
+						       l[0]));
 			}
 		}
 		if (XCheckTypedEvent(display, KeyPress, &event)) {
@@ -182,7 +184,9 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Zero length keypress.\n");
 			}
 			buf[len] = '\0';
-			fprintf(stderr, "keypress:'%s'\n", buf);
+			if (keysym != XK_Escape) {
+				fprintf(stderr, "keypress:'%s'\n", buf);
+			}
 			break;
 		}
 		while (XCheckWindowEvent
