@@ -21,7 +21,7 @@ struct virtual_window {
 	uint32_t *pixels;
 };
 
-internal void fill_virtual(struct virtual_window virtual_win, int x_offset)
+internal void fill_virtual(struct virtual_window virtual_win, int offset)
 {
 	int x, y;
 	uint8_t red, blue;
@@ -29,8 +29,8 @@ internal void fill_virtual(struct virtual_window virtual_win, int x_offset)
 
 	for (y = 0; y < virtual_win.height; y++) {
 		for (x = 0; x < virtual_win.width; x++) {
-			red = (x + x_offset) % 256;
-			blue = y % 256;
+			red = (x + offset) % 256;
+			blue = (y + offset) % 256;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
 			*(virtual_win.pixels + (y * virtual_win.width) + x) =
 			    foreground;
@@ -38,7 +38,7 @@ internal void fill_virtual(struct virtual_window virtual_win, int x_offset)
 	}
 }
 
-void redraw(Display *display, Window window, GC context,
+void redraw(Display * display, Window window, GC context,
 	    struct virtual_window virtual_win)
 {
 	XWindowAttributes window_attributes;
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 	XSetWindowAttributes window_attributes;
 	struct virtual_window virtual_win;
 	int screen, x, y, shutdown, len;
-	unsigned int width, height, border_width, border;
+	unsigned int width, height, border_width, border, msg;
 	unsigned long background, black;
 	Window window;
 	Bool only_if_exists;
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 	XGCValues *values;
 	XEvent event;
 	KeySym keysym;
-	uint8_t x_offset;
+	uint8_t offset;
 
 	if (argc > 1) {
 		display_name = argv[1];
@@ -108,14 +108,15 @@ int main(int argc, char *argv[])
 
 	virtual_win.height = height;
 	virtual_win.width = width;
-	virtual_win.pixels = malloc(virtual_win.height * virtual_win.width * sizeof(uint32_t));
+	virtual_win.pixels =
+	    malloc(virtual_win.height * virtual_win.width * sizeof(uint32_t));
 	if (!virtual_win.pixels) {
 		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
 		return 1;
 	}
 
-	x_offset = 0;
-	fill_virtual(virtual_win, x_offset++);
+	offset = 0;
+	fill_virtual(virtual_win, offset++);
 
 	window =
 	    XCreateSimpleWindow(display, parent, x, y, width, height,
@@ -160,9 +161,8 @@ int main(int argc, char *argv[])
 				}
 				break;
 			} else {
-				fprintf(stdout, "got ClientMessage: %u\n",
-					(unsigned int)(event.xclient.data.
-						       l[0]));
+				msg = (unsigned int)(event.xclient.data.l[0]);
+				fprintf(stdout, "got ClientMessage: %u\n", msg);
 			}
 		}
 		if (XCheckTypedEvent(display, KeyPress, &event)) {
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
 		}
 		while (XCheckWindowEvent
 		       (display, window, ExposureMask, &event)) ;
-		fill_virtual(virtual_win, x_offset++);
+		fill_virtual(virtual_win, offset++);
 		redraw(display, window, context, virtual_win);
 	}
 
