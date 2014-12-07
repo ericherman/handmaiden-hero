@@ -1,3 +1,13 @@
+2014-12-07
+
+commit bfbb786d is approximate linux parity with
+"Handmade Hero Day 005 - Windows Graphics Review"
+https://www.youtube.com/watch?v=w7ay7QXmo_o
+
+However, the way I am drawing on the screen is very, very slow.
+Also the way I am using the XEvent loop might be totally wrong.
+
+
 2014-12-06
 
 commit 442c66d2 is approximate linux parity with
