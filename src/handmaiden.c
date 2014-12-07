@@ -4,6 +4,7 @@
 #include <X11/Xutil.h>
 
 #include <stdio.h>		/* fprintf */
+#include <stdint.h>		/* unit8_t */
 #include <stdlib.h>		/* malloc */
 
 #define BUF_LEN 255
@@ -17,21 +18,33 @@
 struct virtual_window {
 	int height;
 	int width;
-	unsigned int *pixels;
+	uint32_t *pixels;
 };
 
-void redraw(XExposeEvent *event, GC context,
+void fill_virtual(struct virtual_window *virtual_win, int x_offset)
+{
+	int x, y;
+	uint8_t red, blue;
+	uint32_t foreground;
+
+	for (y = 0; y < virtual_win->height; y++) {
+		for (x = 0; x < virtual_win->width; x++) {
+			red = (x + x_offset) % 256;
+			blue = y % 256;
+			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
+			*(virtual_win->pixels + (y * virtual_win->width) + x) =
+			    foreground;
+		}
+	}
+}
+
+void redraw(Display *display, Window window, GC context,
 	    struct virtual_window *virtual_win)
 {
-	Display *display;
-	Window window;
 	XWindowAttributes window_attributes;
 	int x, y, vert_y, vert_x, offset;
 	float x_ratio, y_ratio;
 	unsigned int foreground;
-
-	display = event->display;
-	window = event->window;
 
 	XGetWindowAttributes(display, window, &window_attributes);
 
@@ -48,7 +61,7 @@ void redraw(XExposeEvent *event, GC context,
 			XDrawPoint(display, window, context, x, y);
 		}
 	}
-	fprintf(stderr, "redrawn\n");
+	/* fprintf(stderr, "redrawn\n"); */
 }
 
 int main(int argc, char *argv[])
@@ -59,7 +72,7 @@ int main(int argc, char *argv[])
 	XSetWindowAttributes window_attributes;
 	struct virtual_window *virtual_win;
 	int screen, x, y, shutdown, len;
-	unsigned int width, height, border_width, border, foreground;
+	unsigned int width, height, border_width, border;
 	unsigned long background, black;
 	Window window;
 	Bool only_if_exists;
@@ -69,6 +82,7 @@ int main(int argc, char *argv[])
 	XGCValues *values;
 	XEvent event;
 	KeySym keysym;
+	uint8_t x_offset;
 
 	if (argc > 1) {
 		display_name = argv[1];
@@ -100,20 +114,14 @@ int main(int argc, char *argv[])
 	virtual_win->height = height;
 	virtual_win->width = width;
 	virtual_win->pixels =
-	    malloc(virtual_win->height * virtual_win->width *
-		   sizeof(unsigned int));
+	    malloc(virtual_win->height * virtual_win->width * sizeof(uint32_t));
 	if (!virtual_win->pixels) {
 		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
 		return 1;
 	}
 
-	for (y = 0; y < virtual_win->height; y++) {
-		for (x = 0; x < virtual_win->width; x++) {
-			foreground = ((x % 256) << 16) + (y % 256);
-			*(virtual_win->pixels + (y * virtual_win->width) + x) =
-			    foreground;
-		}
-	}
+	x_offset = 0;
+	fill_virtual(virtual_win, x_offset++);
 
 	window =
 	    XCreateSimpleWindow(display, parent, x, y, width, height,
@@ -148,13 +156,20 @@ int main(int argc, char *argv[])
 
 	shutdown = 0;
 	while (!shutdown) {
-		XNextEvent(display, &event);
-		switch (event.type) {
-		case Expose:
-			XSync(display, True);
-			redraw((XExposeEvent *)&event, context, virtual_win);
-			break;
-		case KeyPress:
+		if (XCheckTypedEvent(display, ClientMessage, &event)) {
+			if ((unsigned int)(event.xclient.data.l[0]) ==
+			    (unsigned int)WM_DELETE_WINDOW) {
+				XSync(display, True);
+				shutdown = 1;
+				fprintf(stderr, "WM_DELETE_WINDOW\n");
+				break;
+			} else {
+				fprintf(stdout, "got ClientMessage: %u\n",
+					(unsigned int)(event.xclient.
+						       data.l[0]));
+			}
+		}
+		if (XCheckTypedEvent(display, KeyPress, &event)) {
 			buf[0] = '\0';
 			len =
 			    XLookupString(&event.xkey, buf, BUF_LEN, &keysym,
@@ -169,22 +184,11 @@ int main(int argc, char *argv[])
 			buf[len] = '\0';
 			fprintf(stderr, "keypress:'%s'\n", buf);
 			break;
-		case ClientMessage:
-			if ((unsigned int)(event.xclient.data.l[0]) ==
-			    (unsigned int)WM_DELETE_WINDOW) {
-				XSync(display, True);
-				shutdown = 1;
-				fprintf(stderr, "WM_DELETE_WINDOW\n");
-			} else {
-				fprintf(stdout, "got ClientMessage: %u\n",
-					(unsigned int)(event.xclient.
-						       data.l[0]));
-			}
-			break;
-		default:
-			fprintf(stdout, "got event.type %d\n", event.type);
-			break;
 		}
+		while (XCheckWindowEvent
+		       (display, window, ExposureMask, &event)) ;
+		fill_virtual(virtual_win, x_offset++);
+		redraw(display, window, context, virtual_win);
 	}
 
 	/* we probably do not need to do these next steps */
