@@ -146,6 +146,7 @@ int main(int argc, char *argv[])
 		XNextEvent(display, &event);
 		switch (event.type) {
 		case Expose:
+			XSync(display, True);
 			redraw(display, window, context, virtual_win);
 			break;
 		case KeyPress:
@@ -154,6 +155,7 @@ int main(int argc, char *argv[])
 			    XLookupString(&event.xkey, buf, BUF_LEN, &keysym,
 					  NULL);
 			if (keysym == XK_Escape) {
+				XSync(display, True);
 				shutdown = 1;
 			}
 			if (len == 0) {
@@ -165,6 +167,7 @@ int main(int argc, char *argv[])
 		case ClientMessage:
 			if ((unsigned int)(event.xclient.data.l[0]) ==
 			    (unsigned int)WM_DELETE_WINDOW) {
+				XSync(display, True);
 				shutdown = 1;
 				fprintf(stderr, "WM_DELETE_WINDOW\n");
 			} else {
