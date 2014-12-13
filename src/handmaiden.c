@@ -21,6 +21,12 @@
 #define local_persistant static
 */
 
+struct offscreen_buffer {
+	XImage *image;
+	int width;
+	int height;
+};
+
 struct virtual_window {
 	int height;
 	int width;
@@ -46,29 +52,47 @@ internal void fill_virtual(struct virtual_window virtual_win, int offset)
 	}
 }
 
-void redraw(Display * display, Window window, GC context,
+void redraw(Display *display, Window window, GC context,
+	    struct offscreen_buffer offscreen,
 	    struct virtual_window virtual_win)
 {
 	XWindowAttributes window_attributes;
-	int x, y, vert_y, vert_x, offset;
+	int width, height, x, y, vert_y, vert_x, offset;
 	float x_ratio, y_ratio;
 	unsigned int foreground;
 
 	XGetWindowAttributes(display, window, &window_attributes);
 
-	y_ratio = virtual_win.height / (float)window_attributes.height;
-	x_ratio = virtual_win.width / (float)window_attributes.width;
+	width = window_attributes.width;
+	height = window_attributes.height;
 
-	for (y = 0; y < window_attributes.height; y++) {
+	if (width != offscreen.width || height != offscreen.height) {
+		if (offscreen.image) {
+			XDestroyImage(offscreen.image);
+		}
+		offscreen.width = width;
+		offscreen.height = height;
+		offscreen.image =
+		    XGetImage(display, window, 0, 0, width, height, AllPlanes,
+			      XYPixmap);
+	}
+
+	y_ratio = virtual_win.height / (float)height;
+	x_ratio = virtual_win.width / (float)width;
+
+	for (y = 0; y < height; y++) {
 		vert_y = (int)(y * y_ratio);
-		for (x = 0; x < window_attributes.width; x++) {
+		for (x = 0; x < width; x++) {
 			vert_x = (int)(x * x_ratio);
 			offset = (vert_y * virtual_win.width) + vert_x;
 			foreground = *(virtual_win.pixels + offset);
-			XSetForeground(display, context, foreground);
-			XDrawPoint(display, window, context, x, y);
+			XPutPixel(offscreen.image, x, y, foreground);
 		}
 	}
+
+	XPutImage(display, window, context, offscreen.image, 0, 0, 0, 0, width,
+		  height);
+
 	/* fprintf(stderr, "redrawn\n"); */
 }
 
@@ -91,6 +115,11 @@ int main(int argc, char *argv[])
 	XEvent event;
 	KeySym keysym;
 	uint8_t offset;
+	struct offscreen_buffer offscreen;
+
+	offscreen.image = NULL;
+	offscreen.width = 0;
+	offscreen.height = 0;
 
 	if (argc > 1) {
 		display_name = argv[1];
@@ -200,12 +229,15 @@ int main(int argc, char *argv[])
 		while (XCheckWindowEvent
 		       (display, window, ExposureMask, &event)) ;
 		fill_virtual(virtual_win, offset++);
-		redraw(display, window, context, virtual_win);
+		redraw(display, window, context, offscreen, virtual_win);
 	}
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
 		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
+		if (offscreen.image) {
+			XDestroyImage(offscreen.image);
+		}
 		XFreeGC(display, context);
 		XDestroyWindow(display, window);
 		XCloseDisplay(display);
