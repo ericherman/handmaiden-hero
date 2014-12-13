@@ -216,6 +216,7 @@ int main(int argc, char *argv[])
 			if (keysym == XK_Escape) {
 				XSync(display, True);
 				shutdown = 1;
+				break;
 			}
 			if (len == 0) {
 				fprintf(stderr, "Zero length keypress.\n");
@@ -224,7 +225,6 @@ int main(int argc, char *argv[])
 			if (keysym != XK_Escape) {
 				fprintf(stderr, "keypress:'%s'\n", buf);
 			}
-			break;
 		}
 		while (XCheckWindowEvent
 		       (display, window, ExposureMask, &event)) ;
