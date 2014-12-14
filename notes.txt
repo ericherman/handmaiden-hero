@@ -1,3 +1,13 @@
+2014-12-14
+
+commit dfe59017 is approximate linux+SDL parity with
+"Handmade Hero Day 005 - Windows Graphics Review"
+https://www.youtube.com/watch?v=w7ay7QXmo_o
+
+I spent some time trying to figure out how to use Xlib in a non-stupid
+way, but as that has not yet panned out, I have elected to go with SDL
+for the time being.
+
 2014-12-07
 
 commit bfbb786d is approximate linux parity with
