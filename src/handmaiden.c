@@ -43,18 +43,18 @@ struct virtual_window {
 	size_t pitch;
 };
 
-internal void fill_virtual(struct virtual_window virtual_win, uint8_t offset)
+internal void fill_virtual(struct virtual_window *virtual_win, uint8_t offset)
 {
 	int x, y;
 	uint8_t red, blue;
 	uint32_t foreground;
 
-	for (y = 0; y < virtual_win.height; y++) {
-		for (x = 0; x < virtual_win.width; x++) {
+	for (y = 0; y < virtual_win->height; y++) {
+		for (x = 0; x < virtual_win->width; x++) {
 			red = x + offset;	/* uint8_t means % 256 */
 			blue = y + offset;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
-			*(virtual_win.pixels + (y * virtual_win.width) + x) =
+			*(virtual_win->pixels + (y * virtual_win->width) + x) =
 			    foreground;
 		}
 	}
@@ -105,33 +105,37 @@ internal void resize_offscreen(SDL_Window *window, SDL_Renderer *renderer,
 	offscreen->pitch = offscreen->width * offscreen->bytes_per_pixel;
 }
 
+internal void stretch_virtual_to_offscreen(struct offscreen_buffer *offscreen,
+					   struct virtual_window *virtual_win)
+{
+	int x, y, virt_x, virt_y;
+	float x_ratio, y_ratio;
+	uint32_t foreground;
+	size_t virt_pos, off_pos;
+
+	y_ratio = virtual_win->height / (float)offscreen->height;
+	x_ratio = virtual_win->width / (float)offscreen->width;
+
+	for (y = 0; y < offscreen->height; y++) {
+		virt_y = (int)(y * y_ratio);
+		for (x = 0; x < offscreen->width; x++) {
+			virt_x = (int)(x * x_ratio);
+			virt_pos = (virt_y * virtual_win->width) + virt_x;
+			off_pos = (offscreen->width * y) + x;
+			foreground = *(virtual_win->pixels + virt_pos);
+			*(offscreen->pixels + off_pos) = foreground;
+		}
+	}
+}
+
 /* TODO only bother resize when we get a resize event? */
 void redraw(SDL_Window *window, SDL_Renderer *renderer,
 	    struct offscreen_buffer *offscreen,
-	    struct virtual_window virtual_win)
+	    struct virtual_window *virtual_win)
 {
-	int width, height, x, y, vert_y, vert_x, offset;
-	float x_ratio, y_ratio;
-	uint32_t foreground;
+	resize_offscreen(window, renderer, offscreen);
 
-	SDL_GetWindowSize(window, &width, &height);
-
-	if (width != offscreen->width || height != offscreen->height) {
-		resize_offscreen(window, renderer, offscreen);
-	}
-
-	y_ratio = virtual_win.height / (float)height;
-	x_ratio = virtual_win.width / (float)width;
-
-	for (y = 0; y < height; y++) {
-		vert_y = (int)(y * y_ratio);
-		for (x = 0; x < width; x++) {
-			vert_x = (int)(x * x_ratio);
-			offset = (vert_y * virtual_win.width) + vert_x;
-			foreground = *(virtual_win.pixels + offset);
-			*(offscreen->pixels + (width * y) + x) = foreground;
-		}
-	}
+	stretch_virtual_to_offscreen(offscreen, virtual_win);
 
 	if (SDL_UpdateTexture
 	    (offscreen->texture, 0, offscreen->pixels, offscreen->pitch)) {
@@ -190,7 +194,7 @@ int main(int argc, char *argv[])
 	virtual_win.pitch = virtual_win.width * virtual_win.bytes_per_pixel;
 
 	offset = 0;
-	fill_virtual(virtual_win, offset++);
+	fill_virtual(&virtual_win, offset++);
 
 	flags = SDL_WINDOW_RESIZABLE;
 	window = SDL_CreateWindow(title, x, y, width, height, flags);
@@ -275,8 +279,8 @@ int main(int argc, char *argv[])
 				break;
 			}
 		}
-		fill_virtual(virtual_win, offset++);
-		redraw(window, renderer, &offscreen, virtual_win);
+		fill_virtual(&virtual_win, offset++);
+		redraw(window, renderer, &offscreen, &virtual_win);
 	}
 
 	/* we probably do not need to do these next steps */
