@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
 	    mmap(0, virtual_win.pixels_bytes_len, PROT_READ | PROT_WRITE,
 		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (!virtual_win.pixels) {
-		fprintf(stderr, "Could not malloc virtual_win->pixels\n");
+		fprintf(stderr, "Could not alloc virtual_win->pixels\n");
 		return 1;
 	}
 	virtual_win.pitch = virtual_win.width * virtual_win.bytes_per_pixel;
@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
 	flags = SDL_WINDOW_RESIZABLE;
 	window = SDL_CreateWindow(title, x, y, width, height, flags);
 	if (!window) {
-		fprintf(stderr, "Could not XCreateSimpleWindow\n");
+		fprintf(stderr, "Could not SDL_CreateWindow\n");
 		return 2;
 	}
 	win_id = SDL_GetWindowID(window);
@@ -255,14 +255,13 @@ int main(int argc, char *argv[])
 					break;
 				case SDL_WINDOWEVENT_SIZE_CHANGED:
 					/* either as a result of an API call */
-					/* or through the system or
-						user action */
+					/* or through the system
+					   or user action */
 					/* this event is followed by */
 					/* SDL_WINDOWEVENT_RESIZED
-						if the size was */
+					   if the size was */
 					/* changed by an external event,
-						i.e. the */
-					/* user or the window manager */
+					   (user or the window manager) */
 					break;
 				case SDL_WINDOWEVENT_MINIMIZED:
 					break;
