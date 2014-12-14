@@ -227,6 +227,12 @@ int main(int argc, char *argv[])
 			case SDL_QUIT:
 				shutdown = 1;
 				break;
+			case SDL_KEYDOWN:
+				if (event.key.keysym.scancode ==
+				    SDL_SCANCODE_ESCAPE) {
+					shutdown = 1;
+				};
+				break;
 			case SDL_WINDOWEVENT:
 				if (event.window.windowID != win_id) {
 					/* not our event? */
