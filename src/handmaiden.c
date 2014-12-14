@@ -37,6 +37,14 @@ struct texture_buffer {
 	struct pixel_buffer *pixel_buf;
 };
 
+struct sdl_event_context {
+	struct texture_buffer *texture_buf;
+	SDL_Window *window;
+	Uint32 win_id;
+	SDL_Renderer *renderer;
+	SDL_Event *event;
+};
+
 internal void fill_virtual(struct pixel_buffer *virtual_win, uint8_t offset)
 {
 	int x, y;
@@ -154,11 +162,91 @@ internal void blit_texture(SDL_Renderer *renderer,
 	blit_bytes(renderer, texture, rect, pixels, pitch);
 }
 
+internal int process_event(struct sdl_event_context *ctx)
+{
+	switch (ctx->event->type) {
+	case SDL_QUIT:
+		return 1;
+		break;
+	case SDL_KEYDOWN:
+		if (ctx->event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+			return 1;
+		};
+		break;
+	case SDL_WINDOWEVENT:
+		if (ctx->event->window.windowID != ctx->win_id) {
+			/* not our event? */
+			break;
+		}
+		switch (ctx->event->window.event) {
+		case SDL_WINDOWEVENT_NONE:
+			/* (docs say never used) */
+			break;
+		case SDL_WINDOWEVENT_SHOWN:
+			break;
+		case SDL_WINDOWEVENT_HIDDEN:
+			break;
+		case SDL_WINDOWEVENT_EXPOSED:
+			/* window should be redrawn */
+			break;
+		case SDL_WINDOWEVENT_MOVED:
+			/* window moved to data1, data2 */
+			break;
+		case SDL_WINDOWEVENT_RESIZED:
+			/* window resized to data1 x data2 */
+			/* always preceded by */
+			/* SDL_WINDOWEVENT_SIZE_CHANGED */
+			resize_texture_buffer(ctx->window, ctx->renderer,
+					      ctx->texture_buf);
+			break;
+		case SDL_WINDOWEVENT_SIZE_CHANGED:
+			/* either as a result of an API call */
+			/* or through the system
+			   or user action */
+			/* this event is followed by */
+			/* SDL_WINDOWEVENT_RESIZED
+			   if the size was */
+			/* changed by an external event,
+			   (user or the window manager) */
+			break;
+		case SDL_WINDOWEVENT_MINIMIZED:
+			break;
+		case SDL_WINDOWEVENT_MAXIMIZED:
+			break;
+		case SDL_WINDOWEVENT_RESTORED:
+			break;
+		case SDL_WINDOWEVENT_ENTER:
+			/* window has gained mouse focus */
+			break;
+		case SDL_WINDOWEVENT_LEAVE:
+			/* window has lost mouse focus */
+			break;
+		case SDL_WINDOWEVENT_FOCUS_GAINED:
+			/* window has gained keyboard focus */
+			break;
+		case SDL_WINDOWEVENT_FOCUS_LOST:
+			/* window has lost keyboard focus */
+			break;
+		case SDL_WINDOWEVENT_CLOSE:
+			/* the window manager requests close */
+			ctx->event->type = SDL_QUIT;
+			SDL_PushEvent(ctx->event);
+			break;
+		default:
+			/* (how did we get here? */
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	char *title;
 	SDL_Window *window;
-	Uint32 win_id;
 	Uint32 flags;
 	struct pixel_buffer virtual_win;
 	int x, y, width, height, shutdown;
@@ -167,6 +255,7 @@ int main(int argc, char *argv[])
 	uint8_t offset;
 	struct pixel_buffer blit_buf;
 	struct texture_buffer texture_buf;
+	struct sdl_event_context ctx;
 
 	blit_buf.width = 0;
 	blit_buf.height = 0;
@@ -213,93 +302,22 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Could not SDL_CreateWindow\n");
 		return 2;
 	}
-	win_id = SDL_GetWindowID(window);
 	renderer = SDL_CreateRenderer(window, FIRST_SUPPORTING, NONE);
 	if (!renderer) {
 		return 3;
 	}
 	resize_texture_buffer(window, renderer, &texture_buf);
 
+	ctx.event = &event;
+	ctx.texture_buf = &texture_buf;
+	ctx.renderer = renderer;
+	ctx.window = window;
+	ctx.win_id = SDL_GetWindowID(window);
+
 	shutdown = 0;
 	while (!shutdown) {
 		while (SDL_PollEvent(&event)) {
-			switch (event.type) {
-			case SDL_QUIT:
-				shutdown = 1;
-				break;
-			case SDL_KEYDOWN:
-				if (event.key.keysym.scancode ==
-				    SDL_SCANCODE_ESCAPE) {
-					shutdown = 1;
-				};
-				break;
-			case SDL_WINDOWEVENT:
-				if (event.window.windowID != win_id) {
-					/* not our event? */
-					break;
-				}
-				switch (event.window.event) {
-				case SDL_WINDOWEVENT_NONE:
-					/* (docs say never used) */
-					break;
-				case SDL_WINDOWEVENT_SHOWN:
-					break;
-				case SDL_WINDOWEVENT_HIDDEN:
-					break;
-				case SDL_WINDOWEVENT_EXPOSED:
-					/* window should be redrawn */
-					break;
-				case SDL_WINDOWEVENT_MOVED:
-					/* window moved to data1, data2 */
-					break;
-				case SDL_WINDOWEVENT_RESIZED:
-					/* window resized to data1 x data2 */
-					/* always preceded by */
-					/* SDL_WINDOWEVENT_SIZE_CHANGED */
-					resize_texture_buffer(window, renderer,
-							      &texture_buf);
-					break;
-				case SDL_WINDOWEVENT_SIZE_CHANGED:
-					/* either as a result of an API call */
-					/* or through the system
-					   or user action */
-					/* this event is followed by */
-					/* SDL_WINDOWEVENT_RESIZED
-					   if the size was */
-					/* changed by an external event,
-					   (user or the window manager) */
-					break;
-				case SDL_WINDOWEVENT_MINIMIZED:
-					break;
-				case SDL_WINDOWEVENT_MAXIMIZED:
-					break;
-				case SDL_WINDOWEVENT_RESTORED:
-					break;
-				case SDL_WINDOWEVENT_ENTER:
-					/* window has gained mouse focus */
-					break;
-				case SDL_WINDOWEVENT_LEAVE:
-					/* window has lost mouse focus */
-					break;
-				case SDL_WINDOWEVENT_FOCUS_GAINED:
-					/* window has gained keyboard focus */
-					break;
-				case SDL_WINDOWEVENT_FOCUS_LOST:
-					/* window has lost keyboard focus */
-					break;
-				case SDL_WINDOWEVENT_CLOSE:
-					/* the window manager requests close */
-					event.type = SDL_QUIT;
-					SDL_PushEvent(&event);
-					break;
-				default:
-					/* (how did we get here? */
-					break;
-				}
-				break;
-			default:
-				break;
-			}
+			shutdown = process_event(&ctx);
 		}
 		fill_virtual(&virtual_win, offset++);
 		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
