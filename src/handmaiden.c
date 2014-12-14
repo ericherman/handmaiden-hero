@@ -105,7 +105,7 @@ internal void resize_offscreen(SDL_Window *window, SDL_Renderer *renderer,
 	offscreen->pitch = offscreen->width * offscreen->bytes_per_pixel;
 }
 
-internal void stretch_virtual_to_offscreen(struct offscreen_buffer *offscreen,
+internal void fill_offscreen_from_virtual(struct offscreen_buffer *offscreen,
 					   struct virtual_window *virtual_win)
 {
 	int x, y, virt_x, virt_y;
@@ -128,12 +128,8 @@ internal void stretch_virtual_to_offscreen(struct offscreen_buffer *offscreen,
 	}
 }
 
-void redraw(SDL_Renderer *renderer,
-	    struct offscreen_buffer *offscreen,
-	    struct virtual_window *virtual_win)
+void redraw(SDL_Renderer *renderer, struct offscreen_buffer *offscreen)
 {
-	stretch_virtual_to_offscreen(offscreen, virtual_win);
-
 	if (SDL_UpdateTexture
 	    (offscreen->texture, 0, offscreen->pixels, offscreen->pitch)) {
 		fprintf(stderr, "Could not SDL_UpdateTexture\n");
@@ -279,7 +275,8 @@ int main(int argc, char *argv[])
 			}
 		}
 		fill_virtual(&virtual_win, offset++);
-		redraw(renderer, &offscreen, &virtual_win);
+		fill_offscreen_from_virtual(&offscreen, &virtual_win);
+		redraw(renderer, &offscreen);
 	}
 
 	/* we probably do not need to do these next steps */
