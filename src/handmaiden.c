@@ -1,4 +1,5 @@
-#define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
+#define ERIC_DEBUG 0
+#define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY ERIC_DEBUG
 
 /* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
 #define _GNU_SOURCE
@@ -59,53 +60,64 @@ internal void fill_virtual(struct virtual_window virtual_win, uint8_t offset)
 	}
 }
 
-/* TODO split the re-size logic out; only bother when we get a resize event */
-void redraw(SDL_Window * window,
+internal void resize_offscreen(SDL_Window *window, SDL_Renderer *renderer,
+			       struct offscreen_buffer *offscreen)
+{
+	int height, width;
+
+	SDL_GetWindowSize(window, &width, &height);
+	if (width == offscreen->width && height == offscreen->height) {
+		/* nothing to do */
+		return;
+	}
+	if (ERIC_DEBUG) {
+		fprintf(stderr, "was %d x %d, need %d x %d\n",
+			offscreen->width, offscreen->height, width, height);
+	}
+	if (offscreen->texture) {
+		SDL_DestroyTexture(offscreen->texture);
+	}
+	if (offscreen->pixels) {
+		munmap(offscreen->pixels, offscreen->pixels_bytes_len);
+	}
+	offscreen->width = width;
+	offscreen->height = height;
+	offscreen->texture = SDL_CreateTexture(renderer,
+					       SDL_PIXELFORMAT_ARGB8888,
+					       SDL_TEXTUREACCESS_STREAMING,
+					       offscreen->width,
+					       offscreen->height);
+	if (!offscreen->texture) {
+		fprintf(stderr, "Could not alloc offscreen->texture\n");
+		exit(EXIT_FAILURE);
+	}
+	offscreen->pixels_bytes_len =
+	    offscreen->height * offscreen->width * offscreen->bytes_per_pixel;
+	offscreen->pixels =
+	    mmap(0, offscreen->pixels_bytes_len, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (!offscreen->pixels) {
+		fprintf(stderr,
+			"Could not alloc offscreen->pixels (%d)\n",
+			offscreen->pixels_bytes_len);
+		exit(EXIT_FAILURE);
+	}
+	offscreen->pitch = offscreen->width * offscreen->bytes_per_pixel;
+}
+
+/* TODO only bother resize when we get a resize event? */
+void redraw(SDL_Window *window, SDL_Renderer *renderer,
 	    struct offscreen_buffer *offscreen,
 	    struct virtual_window virtual_win)
 {
-	SDL_Renderer *renderer;
 	int width, height, x, y, vert_y, vert_x, offset;
 	float x_ratio, y_ratio;
 	uint32_t foreground;
 
 	SDL_GetWindowSize(window, &width, &height);
-	renderer = SDL_GetRenderer(window);
 
 	if (width != offscreen->width || height != offscreen->height) {
-		fprintf(stderr, "was %d x %d, need %d x %d\n",
-			offscreen->width, offscreen->height, width, height);
-		if (offscreen->texture) {
-			SDL_DestroyTexture(offscreen->texture);
-		}
-		if (offscreen->pixels) {
-			munmap(offscreen->pixels, offscreen->pixels_bytes_len);
-		}
-		offscreen->width = width;
-		offscreen->height = height;
-		offscreen->texture = SDL_CreateTexture(renderer,
-						       SDL_PIXELFORMAT_ARGB8888,
-						       SDL_TEXTUREACCESS_STREAMING,
-						       offscreen->width,
-						       offscreen->height);
-		if (!offscreen->texture) {
-			fprintf(stderr, "Could not alloc offscreen->texture\n");
-			exit(EXIT_FAILURE);
-		}
-		offscreen->pixels_bytes_len =
-		    offscreen->height * offscreen->width *
-		    offscreen->bytes_per_pixel;
-		offscreen->pixels =
-		    mmap(0, offscreen->pixels_bytes_len, PROT_READ | PROT_WRITE,
-			 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-		if (!offscreen->pixels) {
-			fprintf(stderr,
-				"Could not alloc offscreen->pixels (%d)\n",
-				offscreen->pixels_bytes_len);
-			exit(EXIT_FAILURE);
-		}
-		offscreen->pitch =
-		    offscreen->width * offscreen->bytes_per_pixel;
+		resize_offscreen(window, renderer, offscreen);
 	}
 
 	y_ratio = virtual_win.height / (float)height;
@@ -126,8 +138,6 @@ void redraw(SDL_Window * window,
 		fprintf(stderr, "Could not SDL_UpdateTexture\n");
 		exit(EXIT_FAILURE);
 	}
-
-	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, offscreen->texture, 0, 0);
 	SDL_RenderPresent(renderer);
 }
@@ -266,7 +276,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		fill_virtual(virtual_win, offset++);
-		redraw(window, &offscreen, virtual_win);
+		redraw(window, renderer, &offscreen, virtual_win);
 	}
 
 	/* we probably do not need to do these next steps */
