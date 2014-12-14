@@ -128,13 +128,10 @@ internal void stretch_virtual_to_offscreen(struct offscreen_buffer *offscreen,
 	}
 }
 
-/* TODO only bother resize when we get a resize event? */
-void redraw(SDL_Window *window, SDL_Renderer *renderer,
+void redraw(SDL_Renderer *renderer,
 	    struct offscreen_buffer *offscreen,
 	    struct virtual_window *virtual_win)
 {
-	resize_offscreen(window, renderer, offscreen);
-
 	stretch_virtual_to_offscreen(offscreen, virtual_win);
 
 	if (SDL_UpdateTexture
@@ -207,6 +204,7 @@ int main(int argc, char *argv[])
 	if (!renderer) {
 		return 3;
 	}
+	resize_offscreen(window, renderer, &offscreen);
 
 	shutdown = 0;
 	while (!shutdown) {
@@ -238,6 +236,7 @@ int main(int argc, char *argv[])
 					/* window resized to data1 x data2 */
 					/* always preceded by */
 					/* SDL_WINDOWEVENT_SIZE_CHANGED */
+					resize_offscreen(window, renderer, &offscreen);
 					break;
 				case SDL_WINDOWEVENT_SIZE_CHANGED:
 					/* either as a result of an API call */
@@ -280,7 +279,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		fill_virtual(&virtual_win, offset++);
-		redraw(window, renderer, &offscreen, &virtual_win);
+		redraw(renderer, &offscreen, &virtual_win);
 	}
 
 	/* we probably do not need to do these next steps */
