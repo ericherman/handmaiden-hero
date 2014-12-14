@@ -243,26 +243,32 @@ internal int process_event(struct sdl_event_context *ctx)
 	return 0;
 }
 
+internal void pixel_buffer_init(struct pixel_buffer *buf)
+{
+	buf->width = 0;
+	buf->height = 0;
+	buf->bytes_per_pixel = sizeof(uint32_t);
+	buf->pixels = NULL;
+	buf->pixels_bytes_len = 0;
+	buf->pitch = 0;
+}
+
 int main(int argc, char *argv[])
 {
 	char *title;
 	SDL_Window *window;
 	Uint32 flags;
-	struct pixel_buffer virtual_win;
 	int x, y, width, height, shutdown;
 	SDL_Renderer *renderer;
 	SDL_Event event;
 	uint8_t offset;
+	struct pixel_buffer virtual_win;
 	struct pixel_buffer blit_buf;
 	struct texture_buffer texture_buf;
 	struct sdl_event_context ctx;
 
-	blit_buf.width = 0;
-	blit_buf.height = 0;
-	blit_buf.bytes_per_pixel = sizeof(uint32_t);
-	blit_buf.pixels = NULL;
-	blit_buf.pixels_bytes_len = 0;
-	blit_buf.pitch = 0;
+	pixel_buffer_init(&blit_buf);
+	pixel_buffer_init(&virtual_win);
 
 	texture_buf.texture = NULL;
 	texture_buf.pixel_buf = &blit_buf;
@@ -271,41 +277,28 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
-	x = SDL_WINDOWPOS_UNDEFINED;
-	y = SDL_WINDOWPOS_UNDEFINED;
 	height = 480;
 	width = 640;
-
-	virtual_win.height = height;
-	virtual_win.width = width;
-	virtual_win.bytes_per_pixel = sizeof(uint32_t);
-	virtual_win.pixels_bytes_len =
-	    virtual_win.height * virtual_win.width *
-	    virtual_win.bytes_per_pixel;
-
-	virtual_win.pixels =
-	    mmap(0, virtual_win.pixels_bytes_len, PROT_READ | PROT_WRITE,
-		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (!virtual_win.pixels) {
-		fprintf(stderr, "Could not alloc virtual_win->pixels\n");
-		return 1;
-	}
-	virtual_win.pitch = virtual_win.width * virtual_win.bytes_per_pixel;
+	resize_pixel_buffer(&virtual_win, height, width);
 
 	offset = 0;
 	fill_virtual(&virtual_win, offset++);
 
+	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
+	x = SDL_WINDOWPOS_UNDEFINED;
+	y = SDL_WINDOWPOS_UNDEFINED;
 	flags = SDL_WINDOW_RESIZABLE;
 	window = SDL_CreateWindow(title, x, y, width, height, flags);
 	if (!window) {
 		fprintf(stderr, "Could not SDL_CreateWindow\n");
 		return 2;
 	}
+
 	renderer = SDL_CreateRenderer(window, FIRST_SUPPORTING, NONE);
 	if (!renderer) {
 		return 3;
 	}
+
 	resize_texture_buffer(window, renderer, &texture_buf);
 
 	ctx.event = &event;
