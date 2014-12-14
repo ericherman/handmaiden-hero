@@ -22,28 +22,22 @@
 #define local_persistant static
 */
 
-struct offscreen_buffer {
+struct pixel_buffer {
+	int width;
+	int height;
+	uint32_t *pixels;
+	uint8_t bytes_per_pixel;
+	size_t pixels_bytes_len;
+	/* bytes in a row of pixel data, including padding */
+	size_t pitch;
+};
+
+struct texture_buffer {
 	SDL_Texture *texture;
-	int width;
-	int height;
-	uint32_t *pixels;
-	uint8_t bytes_per_pixel;
-	size_t pixels_bytes_len;
-	/* bytes in a row of pixel data, including padding */
-	size_t pitch;
+	struct pixel_buffer *pixel_buf;
 };
 
-struct virtual_window {
-	int height;
-	int width;
-	uint8_t bytes_per_pixel;
-	uint32_t *pixels;
-	size_t pixels_bytes_len;
-	/* bytes in a row of pixel data, including padding */
-	size_t pitch;
-};
-
-internal void fill_virtual(struct virtual_window *virtual_win, uint8_t offset)
+internal void fill_virtual(struct pixel_buffer *virtual_win, uint8_t offset)
 {
 	int x, y;
 	uint8_t red, blue;
@@ -60,83 +54,104 @@ internal void fill_virtual(struct virtual_window *virtual_win, uint8_t offset)
 	}
 }
 
-internal void resize_offscreen(SDL_Window *window, SDL_Renderer *renderer,
-			       struct offscreen_buffer *offscreen)
+internal void resize_pixel_buffer(struct pixel_buffer *buf, int height,
+				  int width)
+{
+	if (ERIC_DEBUG) {
+		fprintf(stderr, "Buffer was %d x %d, need %d x %d\n",
+			buf->width, buf->height, width, height);
+	}
+	if (buf->pixels) {
+		munmap(buf->pixels, buf->pixels_bytes_len);
+	}
+	buf->width = width;
+	buf->height = height;
+	buf->pixels_bytes_len = buf->height * buf->width * buf->bytes_per_pixel;
+	buf->pixels =
+	    mmap(0, buf->pixels_bytes_len, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (!buf->pixels) {
+		fprintf(stderr, "Could not alloc buf->pixels (%d)\n",
+			buf->pixels_bytes_len);
+		exit(EXIT_FAILURE);
+	}
+	buf->pitch = buf->width * buf->bytes_per_pixel;
+}
+
+internal void resize_texture_buffer(SDL_Window *window,
+				    SDL_Renderer *renderer,
+				    struct texture_buffer *texture_buf)
 {
 	int height, width;
+	struct pixel_buffer *pixel_buf = texture_buf->pixel_buf;
 
 	SDL_GetWindowSize(window, &width, &height);
-	if (width == offscreen->width && height == offscreen->height) {
+	if (width == pixel_buf->width && height == pixel_buf->height) {
 		/* nothing to do */
 		return;
 	}
 	if (ERIC_DEBUG) {
-		fprintf(stderr, "was %d x %d, need %d x %d\n",
-			offscreen->width, offscreen->height, width, height);
+		fprintf(stderr, "Texture was %d x %d, need %d x %d\n",
+			pixel_buf->width, pixel_buf->height, width, height);
 	}
-	if (offscreen->texture) {
-		SDL_DestroyTexture(offscreen->texture);
+	if (texture_buf->texture) {
+		SDL_DestroyTexture(texture_buf->texture);
 	}
-	if (offscreen->pixels) {
-		munmap(offscreen->pixels, offscreen->pixels_bytes_len);
-	}
-	offscreen->width = width;
-	offscreen->height = height;
-	offscreen->texture = SDL_CreateTexture(renderer,
-					       SDL_PIXELFORMAT_ARGB8888,
-					       SDL_TEXTUREACCESS_STREAMING,
-					       offscreen->width,
-					       offscreen->height);
-	if (!offscreen->texture) {
-		fprintf(stderr, "Could not alloc offscreen->texture\n");
+	texture_buf->texture = SDL_CreateTexture(renderer,
+						 SDL_PIXELFORMAT_ARGB8888,
+						 SDL_TEXTUREACCESS_STREAMING,
+						 width, height);
+	if (!texture_buf->texture) {
+		fprintf(stderr, "Could not alloc texture_buf->texture\n");
 		exit(EXIT_FAILURE);
 	}
-	offscreen->pixels_bytes_len =
-	    offscreen->height * offscreen->width * offscreen->bytes_per_pixel;
-	offscreen->pixels =
-	    mmap(0, offscreen->pixels_bytes_len, PROT_READ | PROT_WRITE,
-		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (!offscreen->pixels) {
-		fprintf(stderr,
-			"Could not alloc offscreen->pixels (%d)\n",
-			offscreen->pixels_bytes_len);
-		exit(EXIT_FAILURE);
-	}
-	offscreen->pitch = offscreen->width * offscreen->bytes_per_pixel;
+
+	resize_pixel_buffer(pixel_buf, height, width);
 }
 
-internal void fill_offscreen_from_virtual(struct offscreen_buffer *offscreen,
-					   struct virtual_window *virtual_win)
+internal void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
+					 struct pixel_buffer *virtual_win)
 {
 	int x, y, virt_x, virt_y;
 	float x_ratio, y_ratio;
 	uint32_t foreground;
 	size_t virt_pos, off_pos;
 
-	y_ratio = virtual_win->height / (float)offscreen->height;
-	x_ratio = virtual_win->width / (float)offscreen->width;
+	y_ratio = virtual_win->height / (float)blit_buf->height;
+	x_ratio = virtual_win->width / (float)blit_buf->width;
 
-	for (y = 0; y < offscreen->height; y++) {
+	for (y = 0; y < blit_buf->height; y++) {
 		virt_y = (int)(y * y_ratio);
-		for (x = 0; x < offscreen->width; x++) {
+		for (x = 0; x < blit_buf->width; x++) {
 			virt_x = (int)(x * x_ratio);
 			virt_pos = (virt_y * virtual_win->width) + virt_x;
-			off_pos = (offscreen->width * y) + x;
+			off_pos = (blit_buf->width * y) + x;
 			foreground = *(virtual_win->pixels + virt_pos);
-			*(offscreen->pixels + off_pos) = foreground;
+			*(blit_buf->pixels + off_pos) = foreground;
 		}
 	}
 }
 
-void redraw(SDL_Renderer *renderer, struct offscreen_buffer *offscreen)
+internal void blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
+			 const SDL_Rect *rect, const void *pixels, int pitch)
 {
-	if (SDL_UpdateTexture
-	    (offscreen->texture, 0, offscreen->pixels, offscreen->pitch)) {
+	if (SDL_UpdateTexture(texture, rect, pixels, pitch)) {
 		fprintf(stderr, "Could not SDL_UpdateTexture\n");
 		exit(EXIT_FAILURE);
 	}
-	SDL_RenderCopy(renderer, offscreen->texture, 0, 0);
+	SDL_RenderCopy(renderer, texture, 0, 0);
 	SDL_RenderPresent(renderer);
+}
+
+internal void blit_texture(SDL_Renderer *renderer,
+			   struct texture_buffer *texture_buf)
+{
+	SDL_Texture *texture = texture_buf->texture;
+	const SDL_Rect *rect = 0;
+	const void *pixels = texture_buf->pixel_buf->pixels;
+	int pitch = texture_buf->pixel_buf->pitch;
+
+	blit_bytes(renderer, texture, rect, pixels, pitch);
 }
 
 int main(int argc, char *argv[])
@@ -145,20 +160,23 @@ int main(int argc, char *argv[])
 	SDL_Window *window;
 	Uint32 win_id;
 	Uint32 flags;
-	struct virtual_window virtual_win;
+	struct pixel_buffer virtual_win;
 	int x, y, width, height, shutdown;
 	SDL_Renderer *renderer;
 	SDL_Event event;
 	uint8_t offset;
-	struct offscreen_buffer offscreen;
+	struct pixel_buffer blit_buf;
+	struct texture_buffer texture_buf;
 
-	offscreen.texture = NULL;
-	offscreen.width = 0;
-	offscreen.height = 0;
-	offscreen.bytes_per_pixel = sizeof(uint32_t);
-	offscreen.pixels = NULL;
-	offscreen.pixels_bytes_len = 0;
-	offscreen.pitch = 0;
+	blit_buf.width = 0;
+	blit_buf.height = 0;
+	blit_buf.bytes_per_pixel = sizeof(uint32_t);
+	blit_buf.pixels = NULL;
+	blit_buf.pixels_bytes_len = 0;
+	blit_buf.pitch = 0;
+
+	texture_buf.texture = NULL;
+	texture_buf.pixel_buf = &blit_buf;
 
 	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
 		return 1;
@@ -200,7 +218,7 @@ int main(int argc, char *argv[])
 	if (!renderer) {
 		return 3;
 	}
-	resize_offscreen(window, renderer, &offscreen);
+	resize_texture_buffer(window, renderer, &texture_buf);
 
 	shutdown = 0;
 	while (!shutdown) {
@@ -232,14 +250,18 @@ int main(int argc, char *argv[])
 					/* window resized to data1 x data2 */
 					/* always preceded by */
 					/* SDL_WINDOWEVENT_SIZE_CHANGED */
-					resize_offscreen(window, renderer, &offscreen);
+					resize_texture_buffer(window, renderer,
+							      &texture_buf);
 					break;
 				case SDL_WINDOWEVENT_SIZE_CHANGED:
 					/* either as a result of an API call */
-					/* or through the system or user action */
+					/* or through the system or
+						user action */
 					/* this event is followed by */
-					/* SDL_WINDOWEVENT_RESIZED if the size was */
-					/* changed by an external event, i.e. the */
+					/* SDL_WINDOWEVENT_RESIZED
+						if the size was */
+					/* changed by an external event,
+						i.e. the */
 					/* user or the window manager */
 					break;
 				case SDL_WINDOWEVENT_MINIMIZED:
@@ -275,16 +297,18 @@ int main(int argc, char *argv[])
 			}
 		}
 		fill_virtual(&virtual_win, offset++);
-		fill_offscreen_from_virtual(&offscreen, &virtual_win);
-		redraw(renderer, &offscreen);
+		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
+		blit_texture(renderer, &texture_buf);
 	}
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
 		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
-		if (offscreen.texture) {
-			SDL_DestroyTexture(offscreen.texture);
-			munmap(offscreen.pixels, offscreen.pixels_bytes_len);
+		if (texture_buf.texture) {
+			SDL_DestroyTexture(texture_buf.texture);
+		}
+		if (blit_buf.pixels) {
+			munmap(blit_buf.pixels, blit_buf.pixels_bytes_len);
 		}
 		/* other stuff */
 	}
