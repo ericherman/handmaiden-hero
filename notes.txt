@@ -1,3 +1,12 @@
+2014-12-20
+
+commit ca5bb023 does the keyboard input portion of
+"Handmade Hero Day 006 - Gamepad and Keyboard Input"
+https://www.youtube.com/watch?v=J3y1x54vyIQ
+
+I do not have a game controller, so I will skip that part for now.
+Perhaps, I will return to that at some point in the future.
+
 2014-12-14
 
 commit dfe59017 is approximate linux+SDL parity with
