@@ -32,6 +32,14 @@ struct pixel_buffer {
 	size_t pitch;
 };
 
+struct game_context {
+	struct pixel_buffer *virtual_win;
+	uint8_t x_offset;
+	uint8_t y_offset;
+	int x_shift;
+	int y_shift;
+};
+
 struct texture_buffer {
 	SDL_Texture *texture;
 	struct pixel_buffer *pixel_buf;
@@ -45,16 +53,18 @@ struct sdl_event_context {
 	SDL_Event *event;
 };
 
-internal void fill_virtual(struct pixel_buffer *virtual_win, uint8_t offset)
+internal void fill_virtual(struct game_context *ctx)
 {
+	struct pixel_buffer *virtual_win = ctx->virtual_win;
 	int x, y;
 	uint8_t red, blue;
 	uint32_t foreground;
 
 	for (y = 0; y < virtual_win->height; y++) {
 		for (x = 0; x < virtual_win->width; x++) {
-			red = x + offset;	/* uint8_t means % 256 */
-			blue = y + offset;
+			/* uint8_t means % 256 */
+			red = x + ctx->x_offset;
+			blue = y + ctx->y_offset;
 			foreground = (((uint32_t) blue) << 16) + (uint32_t) red;
 			*(virtual_win->pixels + (y * virtual_win->width) + x) =
 			    foreground;
@@ -162,23 +172,57 @@ internal void blit_texture(SDL_Renderer *renderer,
 	blit_bytes(renderer, texture, rect, pixels, pitch);
 }
 
-internal int process_event(struct sdl_event_context *ctx)
+internal void process_key_event(struct sdl_event_context *event_ctx,
+				struct game_context *ctx)
 {
-	switch (ctx->event->type) {
+	switch (event_ctx->event->key.keysym.scancode) {
+	case SDL_SCANCODE_ESCAPE:
+		event_ctx->event->type = SDL_QUIT;
+		SDL_PushEvent(event_ctx->event);
+		break;
+
+	case SDL_SCANCODE_UP:
+	case SDL_SCANCODE_W:
+		ctx->y_shift++;
+		break;
+	case SDL_SCANCODE_LEFT:
+	case SDL_SCANCODE_A:
+		ctx->x_shift++;
+		break;
+	case SDL_SCANCODE_DOWN:
+	case SDL_SCANCODE_S:
+		ctx->y_shift--;
+		break;
+	case SDL_SCANCODE_RIGHT:
+	case SDL_SCANCODE_D:
+		ctx->x_shift--;
+		break;
+	case SDL_SCANCODE_SPACE:
+		ctx->x_shift = 0;
+		ctx->y_shift = 0;
+		break;
+	default:
+		break;
+	};
+}
+
+internal int process_event(struct sdl_event_context *event_ctx,
+			   struct game_context *ctx)
+{
+	switch (event_ctx->event->type) {
 	case SDL_QUIT:
 		return 1;
 		break;
+	case SDL_KEYUP:
 	case SDL_KEYDOWN:
-		if (ctx->event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-			return 1;
-		};
+		process_key_event(event_ctx, ctx);
 		break;
 	case SDL_WINDOWEVENT:
-		if (ctx->event->window.windowID != ctx->win_id) {
+		if (event_ctx->event->window.windowID != event_ctx->win_id) {
 			/* not our event? */
 			break;
 		}
-		switch (ctx->event->window.event) {
+		switch (event_ctx->event->window.event) {
 		case SDL_WINDOWEVENT_NONE:
 			/* (docs say never used) */
 			break;
@@ -196,8 +240,9 @@ internal int process_event(struct sdl_event_context *ctx)
 			/* window resized to data1 x data2 */
 			/* always preceded by */
 			/* SDL_WINDOWEVENT_SIZE_CHANGED */
-			resize_texture_buffer(ctx->window, ctx->renderer,
-					      ctx->texture_buf);
+			resize_texture_buffer(event_ctx->window,
+					      event_ctx->renderer,
+					      event_ctx->texture_buf);
 			break;
 		case SDL_WINDOWEVENT_SIZE_CHANGED:
 			/* either as a result of an API call */
@@ -229,8 +274,8 @@ internal int process_event(struct sdl_event_context *ctx)
 			break;
 		case SDL_WINDOWEVENT_CLOSE:
 			/* the window manager requests close */
-			ctx->event->type = SDL_QUIT;
-			SDL_PushEvent(ctx->event);
+			event_ctx->event->type = SDL_QUIT;
+			SDL_PushEvent(event_ctx->event);
 			break;
 		default:
 			/* (how did we get here? */
@@ -261,11 +306,11 @@ int main(int argc, char *argv[])
 	int x, y, width, height, shutdown;
 	SDL_Renderer *renderer;
 	SDL_Event event;
-	uint8_t offset;
+	struct game_context ctx;
 	struct pixel_buffer virtual_win;
 	struct pixel_buffer blit_buf;
 	struct texture_buffer texture_buf;
-	struct sdl_event_context ctx;
+	struct sdl_event_context event_ctx;
 
 	pixel_buffer_init(&blit_buf);
 	pixel_buffer_init(&virtual_win);
@@ -281,8 +326,12 @@ int main(int argc, char *argv[])
 	width = 640;
 	resize_pixel_buffer(&virtual_win, height, width);
 
-	offset = 0;
-	fill_virtual(&virtual_win, offset++);
+	ctx.virtual_win = &virtual_win;
+	ctx.x_offset = 0;
+	ctx.y_offset = 0;
+	ctx.x_shift = 0;
+	ctx.y_shift = 0;
+	fill_virtual(&ctx);
 
 	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
 	x = SDL_WINDOWPOS_UNDEFINED;
@@ -301,18 +350,20 @@ int main(int argc, char *argv[])
 
 	resize_texture_buffer(window, renderer, &texture_buf);
 
-	ctx.event = &event;
-	ctx.texture_buf = &texture_buf;
-	ctx.renderer = renderer;
-	ctx.window = window;
-	ctx.win_id = SDL_GetWindowID(window);
+	event_ctx.event = &event;
+	event_ctx.texture_buf = &texture_buf;
+	event_ctx.renderer = renderer;
+	event_ctx.window = window;
+	event_ctx.win_id = SDL_GetWindowID(window);
 
 	shutdown = 0;
 	while (!shutdown) {
 		while (SDL_PollEvent(&event)) {
-			shutdown = process_event(&ctx);
+			shutdown = process_event(&event_ctx, &ctx);
 		}
-		fill_virtual(&virtual_win, offset++);
+		ctx.x_offset += ctx.x_shift;
+		ctx.y_offset += ctx.y_shift;
+		fill_virtual(&ctx);
 		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
 		blit_texture(renderer, &texture_buf);
 	}
