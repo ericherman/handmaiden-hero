@@ -1,10 +1,10 @@
 all: clean handmaiden
 
 clean:
-	rm -rf gebouwd
-	mkdir -p gebouwd
+	rm -rf build
+	mkdir -p build
 
 handmaiden:
 	gcc -std=c89 -O3 -march=native -Wall -Wextra -pedantic -Werror -ggdb \
-		-o gebouwd/handmaiden src/handmaiden.c \
+		-o build/handmaiden src/handmaiden.c \
 		`sdl2-config --cflags --libs`
