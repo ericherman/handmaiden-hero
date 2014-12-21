@@ -176,9 +176,9 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 				struct game_context *ctx)
 {
 	/*
-	int was_down = ((Event->key.repeat != 0)
-			|| (Event->key.state == SDL_RELEASED));
-	*/
+	   int was_down = ((Event->key.repeat != 0)
+	   || (Event->key.state == SDL_RELEASED));
+	 */
 	switch (event_ctx->event->key.keysym.scancode) {
 	case SDL_SCANCODE_ESCAPE:
 		event_ctx->event->type = SDL_QUIT;
@@ -302,6 +302,50 @@ internal void pixel_buffer_init(struct pixel_buffer *buf)
 	buf->pitch = 0;
 }
 
+/*
+userdata: an application-specific parameter saved in the SDL_AudioSpec
+          structure's userdata field
+stream:   a pointer to the audio data buffer filled in by SDL_AudioCallback()
+len:      the length of that buffer in bytes
+*/
+void audio_callback(void *userdata, Uint8 *stream, int len)
+{
+	memset(stream, userdata ? *((int *)userdata) : 0, len);
+}
+
+internal SDL_AudioDeviceID init_audio()
+{
+	int audio_allow_change;
+	SDL_AudioSpec want, have;
+	SDL_AudioDeviceID audio_dev;
+
+	SDL_zero(want);
+	want.freq = 48000;
+	want.format = AUDIO_F32;
+	want.channels = 2;
+	want.samples = 4096;
+	want.callback = audio_callback;
+	audio_allow_change =
+	    SDL_AUDIO_ALLOW_FORMAT_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
+
+	audio_dev =
+	    SDL_OpenAudioDevice(NULL, 0, &want, &have, audio_allow_change);
+	if (audio_dev == 0) {
+		fprintf(stderr, "Failed to open audio: %s\n", SDL_GetError());
+		return 0;
+	}
+	if (have.format != want.format) {
+		printf("Expected Float32 (%x) audio format, got %x\n",
+		       want.format, have.format);
+	}
+	if (have.channels != want.channels) {
+		printf("Expected %d audio channels, got %d.\n", want.channels,
+		       have.channels);
+	}
+
+	return audio_dev;
+}
+
 int main(int argc, char *argv[])
 {
 	char *title;
@@ -316,13 +360,15 @@ int main(int argc, char *argv[])
 	struct texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
 
+	SDL_AudioDeviceID audio_dev;
+
 	pixel_buffer_init(&blit_buf);
 	pixel_buffer_init(&virtual_win);
 
 	texture_buf.texture = NULL;
 	texture_buf.pixel_buf = &blit_buf;
 
-	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
 		return 1;
 	}
 
@@ -354,6 +400,10 @@ int main(int argc, char *argv[])
 
 	resize_texture_buffer(window, renderer, &texture_buf);
 
+	audio_dev = init_audio();
+	/* start audio playing by setting "pause" to zero */
+	SDL_PauseAudioDevice(audio_dev, 0);
+
 	event_ctx.event = &event;
 	event_ctx.texture_buf = &texture_buf;
 	event_ctx.renderer = renderer;
@@ -370,6 +420,10 @@ int main(int argc, char *argv[])
 		fill_virtual(&ctx);
 		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
 		blit_texture(renderer, &texture_buf);
+	}
+
+	if (audio_dev) {
+		SDL_CloseAudioDevice(audio_dev);
 	}
 
 	/* we probably do not need to do these next steps */
