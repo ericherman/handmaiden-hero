@@ -175,6 +175,10 @@ internal void blit_texture(SDL_Renderer *renderer,
 internal void process_key_event(struct sdl_event_context *event_ctx,
 				struct game_context *ctx)
 {
+	/*
+	int was_down = ((Event->key.repeat != 0)
+			|| (Event->key.state == SDL_RELEASED));
+	*/
 	switch (event_ctx->event->key.keysym.scancode) {
 	case SDL_SCANCODE_ESCAPE:
 		event_ctx->event->type = SDL_QUIT;
