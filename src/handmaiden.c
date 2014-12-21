@@ -22,6 +22,12 @@
 #define local_persistant static
 */
 
+/* audio config constants */
+#define HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND 48000
+#define HANDMAIDEN_AUDIO_CHANNELS 2
+#define HANDMAIDEN_AUDIO_BUF_SAMPLES_SIZE 16536
+#define HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE sizeof(uint32_t)
+
 struct pixel_buffer {
 	int width;
 	int height;
@@ -30,6 +36,15 @@ struct pixel_buffer {
 	size_t pixels_bytes_len;
 	/* bytes in a row of pixel data, including padding */
 	size_t pitch;
+};
+
+struct sdl_audio_context {
+	uint32_t *sound_buffer;
+	size_t sound_buffer_bytes;
+	size_t write_cursor;
+	size_t play_cursor;
+	size_t sound_position;
+	SDL_AudioDeviceID audio_dev;
 };
 
 struct game_context {
@@ -302,37 +317,87 @@ internal void pixel_buffer_init(struct pixel_buffer *buf)
 	buf->pitch = 0;
 }
 
-/*
-userdata: an application-specific parameter saved in the SDL_AudioSpec
-          structure's userdata field
-stream:   a pointer to the audio data buffer filled in by SDL_AudioCallback()
-len:      the length of that buffer in bytes
-*/
-void audio_callback(void *userdata, Uint8 *stream, int len)
+void audio_callback(void *userdata, uint8_t *stream, int len)
 {
-	memset(stream, userdata ? *((int *)userdata) : 0, len);
+	int region_1_bytes, region_2_bytes;
+	struct sdl_audio_context *audio_ctx;
+
+	audio_ctx = (struct sdl_audio_context *)userdata;
+
+	region_1_bytes = len;
+	region_2_bytes = 0;
+	if ((audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) + len >
+	    audio_ctx->sound_buffer_bytes) {
+		region_1_bytes =
+		    audio_ctx->sound_buffer_bytes -
+		    (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes);
+		region_2_bytes = len - region_1_bytes;
+	}
+	memcpy(stream,
+	       ((uint8_t *) (audio_ctx->sound_buffer)) +
+	       (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes),
+	       region_1_bytes);
+	if (region_2_bytes) {
+		memcpy(&stream[region_1_bytes], audio_ctx->sound_buffer,
+		       region_2_bytes);
+	}
+
+	audio_ctx->play_cursor += len;
+
+	audio_ctx->write_cursor =
+	    (audio_ctx->play_cursor +
+	     (HANDMAIDEN_AUDIO_BUF_SAMPLES_SIZE / HANDMAIDEN_AUDIO_CHANNELS));
 }
 
-internal SDL_AudioDeviceID init_audio()
+internal void init_audio(struct sdl_audio_context *audio_ctx)
 {
 	int audio_allow_change;
 	SDL_AudioSpec want, have;
-	SDL_AudioDeviceID audio_dev;
+
+	audio_ctx->sound_position = 0;
+	audio_ctx->write_cursor = 0;
+	audio_ctx->play_cursor = 0;
+	audio_ctx->sound_buffer_bytes =
+	    HANDMAIDEN_AUDIO_BUF_SAMPLES_SIZE *
+	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
+	audio_ctx->sound_buffer =
+	    (uint32_t *) mmap(0, audio_ctx->sound_buffer_bytes,
+			      PROT_READ | PROT_WRITE,
+			      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (!audio_ctx->sound_buffer) {
+		audio_ctx->audio_dev = 0;
+		fprintf(stderr, "could not allocate sound buffer\n");
+	}
 
 	SDL_zero(want);
-	want.freq = 48000;
+	want.freq = HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND;
 	want.format = AUDIO_F32;
-	want.channels = 2;
-	want.samples = 4096;
-	want.callback = audio_callback;
+	want.channels = HANDMAIDEN_AUDIO_CHANNELS;
+	/*
+	   samples specifies a unit of audio data.
+
+	   When used with SDL_OpenAudioDevice() this refers to the size of the
+	   audio buffer in sample frames.
+
+	   A sample frame is a chunk of audio data of the size specified in
+	   format multiplied by the number of channels.
+
+	   When the SDL_AudioSpec is used with SDL_LoadWAV() samples is set to
+	   4096.
+
+	   This field's value must be a power of two.
+	 */
+	want.samples = HANDMAIDEN_AUDIO_BUF_SAMPLES_SIZE;
+	want.callback = &audio_callback;
+	want.userdata = audio_ctx;
 	audio_allow_change =
 	    SDL_AUDIO_ALLOW_FORMAT_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
 
-	audio_dev =
+	audio_ctx->audio_dev =
 	    SDL_OpenAudioDevice(NULL, 0, &want, &have, audio_allow_change);
-	if (audio_dev == 0) {
+	if (audio_ctx->audio_dev == 0) {
 		fprintf(stderr, "Failed to open audio: %s\n", SDL_GetError());
-		return 0;
+		return;
 	}
 	if (have.format != want.format) {
 		printf("Expected Float32 (%x) audio format, got %x\n",
@@ -342,8 +407,79 @@ internal SDL_AudioDeviceID init_audio()
 		printf("Expected %d audio channels, got %d.\n", want.channels,
 		       have.channels);
 	}
+}
 
-	return audio_dev;
+void fill_sound_buffer(struct game_context *ctx,
+		       struct sdl_audio_context *audio_ctx)
+{
+	unsigned int tone_hz, tone_volume, square_wave_period,
+	    half_square_wave_period, bytes_per_sample, bytes_to_write,
+	    region_1_bytes, region_2_bytes, sample_count, i;
+	uint32_t sample_value;
+	size_t byte_to_lock, buf_pos;
+
+	tone_hz = 128;
+	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
+	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
+	tone_volume = 256;
+	square_wave_period = HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND / tone_hz;
+	half_square_wave_period = square_wave_period / 2;
+	bytes_per_sample = sizeof(int32_t) * HANDMAIDEN_AUDIO_CHANNELS;
+
+	SDL_LockAudio();
+	byte_to_lock =
+	    (audio_ctx->sound_position * bytes_per_sample) %
+	    audio_ctx->sound_buffer_bytes;
+
+	if (byte_to_lock > audio_ctx->play_cursor) {
+		bytes_to_write = (audio_ctx->sound_buffer_bytes - byte_to_lock);
+		bytes_to_write += audio_ctx->play_cursor;
+	} else {
+		bytes_to_write = audio_ctx->play_cursor - byte_to_lock;
+	}
+
+	region_1_bytes = bytes_to_write;
+	if (region_1_bytes + byte_to_lock > audio_ctx->sound_buffer_bytes) {
+		region_1_bytes = audio_ctx->sound_buffer_bytes - byte_to_lock;
+	}
+	region_2_bytes = bytes_to_write - region_1_bytes;
+	if (region_2_bytes >
+	    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes)) {
+		region_2_bytes =
+		    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
+	}
+
+	buf_pos = byte_to_lock;
+	if (byte_to_lock % HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE) {
+		fprintf(stderr, "unexpected audio position\n");
+	}
+	sample_count = region_1_bytes / bytes_per_sample;
+	for (i = 0; i < sample_count; i++) {
+		sample_value =
+		    ((audio_ctx->sound_position++ / half_square_wave_period) %
+		     2) ? tone_volume : -tone_volume;
+		*(uint32_t *) (((uint8_t *) audio_ctx->sound_buffer) +
+			       buf_pos) = sample_value;
+		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
+		*(uint32_t *) (((uint8_t *) audio_ctx->sound_buffer) +
+			       buf_pos) = sample_value;
+		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
+	}
+
+	sample_count = region_2_bytes / bytes_per_sample;
+	buf_pos = 0;
+	for (i = 0; i < sample_count; i++) {
+		sample_value =
+		    ((audio_ctx->sound_position++ / half_square_wave_period) %
+		     2) ? tone_volume : -tone_volume;
+		*(uint32_t *) (((uint8_t *) audio_ctx->sound_buffer) +
+			       buf_pos) = sample_value;
+		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
+		*(uint32_t *) (((uint8_t *) audio_ctx->sound_buffer) +
+			       buf_pos) = sample_value;
+		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
+	}
+	SDL_UnlockAudio();
 }
 
 int main(int argc, char *argv[])
@@ -359,8 +495,7 @@ int main(int argc, char *argv[])
 	struct pixel_buffer blit_buf;
 	struct texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
-
-	SDL_AudioDeviceID audio_dev;
+	struct sdl_audio_context audio_ctx;
 
 	pixel_buffer_init(&blit_buf);
 	pixel_buffer_init(&virtual_win);
@@ -400,9 +535,11 @@ int main(int argc, char *argv[])
 
 	resize_texture_buffer(window, renderer, &texture_buf);
 
-	audio_dev = init_audio();
+	init_audio(&audio_ctx);
 	/* start audio playing by setting "pause" to zero */
-	SDL_PauseAudioDevice(audio_dev, 0);
+	if (audio_ctx.audio_dev) {
+		SDL_PauseAudioDevice(audio_ctx.audio_dev, 0);
+	}
 
 	event_ctx.event = &event;
 	event_ctx.texture_buf = &texture_buf;
@@ -420,10 +557,11 @@ int main(int argc, char *argv[])
 		fill_virtual(&ctx);
 		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
 		blit_texture(renderer, &texture_buf);
+		fill_sound_buffer(&ctx, &audio_ctx);
 	}
 
-	if (audio_dev) {
-		SDL_CloseAudioDevice(audio_dev);
+	if (audio_ctx.audio_dev) {
+		SDL_CloseAudioDevice(audio_ctx.audio_dev);
 	}
 
 	/* we probably do not need to do these next steps */
@@ -435,7 +573,12 @@ int main(int argc, char *argv[])
 		if (blit_buf.pixels) {
 			munmap(blit_buf.pixels, blit_buf.pixels_bytes_len);
 		}
+		if (audio_ctx.sound_buffer) {
+			munmap(audio_ctx.sound_buffer,
+			       audio_ctx.sound_buffer_bytes);
+		}
 		/* other stuff */
+		SDL_Quit();
 	}
 
 	return 0;
