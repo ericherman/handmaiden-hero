@@ -45,6 +45,7 @@ struct audio_context {
 	unsigned int sound_buffer_bytes;
 	unsigned int write_cursor;
 	unsigned int play_cursor;
+	unsigned int volume;
 };
 
 struct game_context {
@@ -193,14 +194,16 @@ internal void sdl_blit_texture(SDL_Renderer *renderer,
 internal void process_key_event(struct sdl_event_context *event_ctx,
 				struct game_context *ctx)
 {
-	/*
-	   int was_down = ((Event->key.repeat != 0)
-	   || (Event->key.state == SDL_RELEASED));
-	 */
+	int was_down = ((event_ctx->event->key.repeat != 0)
+			|| (event_ctx->event->key.state == SDL_RELEASED));
+
 	switch (event_ctx->event->key.keysym.scancode) {
 	case SDL_SCANCODE_ESCAPE:
 		event_ctx->event->type = SDL_QUIT;
 		SDL_PushEvent(event_ctx->event);
+		if (was_down) {
+			fprintf(stderr, "got escape again again?");
+		}
 		break;
 
 	case SDL_SCANCODE_UP:
@@ -222,6 +225,12 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 	case SDL_SCANCODE_SPACE:
 		ctx->x_shift = 0;
 		ctx->y_shift = 0;
+		break;
+	case SDL_SCANCODE_M:
+		if (!was_down) {
+			ctx->audio_ctx->volume =
+			    (ctx->audio_ctx->volume) ? 0 : 64;
+		}
 		break;
 	default:
 		break;
@@ -337,6 +346,11 @@ void audio_callback(void *userdata, unsigned char *stream, int len)
 		len = (audio_ctx->write_cursor - audio_ctx->play_cursor);
 	}
 
+	if (len == 0) {
+		/* why bother */
+		return;
+	}
+
 	region_1_bytes = len;
 	region_2_bytes = 0;
 	if ((audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) + len >
@@ -346,20 +360,25 @@ void audio_callback(void *userdata, unsigned char *stream, int len)
 		    (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes);
 		region_2_bytes = len - region_1_bytes;
 	}
-	memcpy(stream,
-	       ((unsigned char *)(audio_ctx->sound_buffer)) +
-	       (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes),
-	       region_1_bytes);
+
+	if (region_1_bytes) {
+		memcpy(stream,
+		       ((unsigned char *)(audio_ctx->sound_buffer)) +
+		       (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes),
+		       region_1_bytes);
+		audio_ctx->play_cursor += region_1_bytes;
+	}
+
 	if (region_2_bytes) {
 		memcpy(&stream[region_1_bytes], audio_ctx->sound_buffer,
 		       region_2_bytes);
+		audio_ctx->play_cursor += region_2_bytes;
 	}
-
-	audio_ctx->play_cursor += len;
 }
 
 internal unsigned int init_audio_context(struct audio_context *audio_ctx)
 {
+	audio_ctx->volume = 0;
 	audio_ctx->write_cursor = 0;
 	audio_ctx->play_cursor = 0;
 	audio_ctx->sound_buffer_bytes =
@@ -434,7 +453,7 @@ void fill_sound_buffer(struct game_context *ctx)
 	tone_hz = 128;
 	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
 	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
-	tone_volume = 128;
+	tone_volume = audio_ctx->volume;
 	square_wave_period = (HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND) / tone_hz;
 	half_square_wave_period = square_wave_period / 2;
 	bytes_per_sample =
