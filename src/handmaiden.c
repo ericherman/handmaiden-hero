@@ -50,6 +50,7 @@ struct audio_context {
 
 struct game_context {
 	struct pixel_buffer *virtual_win;
+	struct audio_context *audio_ctx;
 	unsigned char x_offset;
 	unsigned char y_offset;
 	int x_shift;
@@ -412,14 +413,16 @@ internal SDL_AudioDeviceID init_audio(struct audio_context *audio_ctx)
 	return audio_dev;
 }
 
-void fill_sound_buffer(struct game_context *ctx,
-		       struct audio_context *audio_ctx)
+void fill_sound_buffer(struct game_context *ctx)
 {
 	unsigned int tone_hz, tone_volume, square_wave_period,
 	    half_square_wave_period, bytes_per_sample, bytes_to_write,
 	    region_1_bytes, region_2_bytes, sample_count, i;
 	unsigned int sample_value;
 	unsigned int byte_to_lock, buf_pos;
+	struct audio_context *audio_ctx;
+
+	audio_ctx = ctx->audio_ctx;
 
 	tone_hz = 128;
 	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
@@ -429,7 +432,6 @@ void fill_sound_buffer(struct game_context *ctx,
 	half_square_wave_period = square_wave_period / 2;
 	bytes_per_sample = sizeof(int32_t) * HANDMAIDEN_AUDIO_CHANNELS;
 
-	SDL_LockAudio();
 	byte_to_lock =
 	    (audio_ctx->audio_stream_position * bytes_per_sample) %
 	    audio_ctx->sound_buffer_bytes;
@@ -484,7 +486,6 @@ void fill_sound_buffer(struct game_context *ctx,
 				  buf_pos) = sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
-	SDL_UnlockAudio();
 }
 
 void diff_timespecs(struct timespec start, struct timespec end,
@@ -534,6 +535,7 @@ int main(int argc, char *argv[])
 	resize_pixel_buffer(&virtual_win, height, width);
 
 	ctx.virtual_win = &virtual_win;
+	ctx.audio_ctx = &audio_ctx;
 	ctx.x_offset = 0;
 	ctx.y_offset = 0;
 	ctx.x_shift = 0;
@@ -593,7 +595,9 @@ int main(int argc, char *argv[])
 		diff_timespecs(last_sound, now, &elapsed);
 		if (((elapsed.tv_sec * 1000000000) + elapsed.tv_nsec) >
 		    100000000) {
-			fill_sound_buffer(&ctx, &audio_ctx);
+			SDL_LockAudio();
+			fill_sound_buffer(&ctx);
+			SDL_UnlockAudio();
 			fps =
 			    ((double)frames_since_sound) /
 			    (((double)elapsed.tv_sec) * 1000000000.0 +
