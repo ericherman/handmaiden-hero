@@ -44,6 +44,7 @@ struct audio_context {
 	unsigned int *sound_buffer;
 	unsigned int sound_buffer_bytes;
 	unsigned int write_cursor;
+	unsigned int write_len;
 	unsigned int play_cursor;
 	unsigned int audio_stream_position;
 };
@@ -352,12 +353,8 @@ void audio_callback(void *userdata, unsigned char *stream, int len)
 	     (HANDMAIDEN_AUDIO_BUF_SAMPLES_SIZE / HANDMAIDEN_AUDIO_CHANNELS));
 }
 
-internal SDL_AudioDeviceID init_audio(struct audio_context *audio_ctx)
+internal unsigned int init_audio_context(struct audio_context *audio_ctx)
 {
-	int audio_allow_change;
-	SDL_AudioSpec want, have;
-	SDL_AudioDeviceID audio_dev;
-
 	audio_ctx->audio_stream_position = 0;
 	audio_ctx->write_cursor = 0;
 	audio_ctx->play_cursor = 0;
@@ -370,8 +367,16 @@ internal SDL_AudioDeviceID init_audio(struct audio_context *audio_ctx)
 				 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (!audio_ctx->sound_buffer) {
 		fprintf(stderr, "could not allocate sound buffer\n");
-		return 0;
 	}
+	return audio_ctx->sound_buffer ? 1 : 0;
+}
+
+internal SDL_AudioDeviceID init_sdl_audio(struct audio_context *audio_ctx)
+{
+	int audio_allow_change;
+	SDL_AudioSpec want, have;
+	SDL_AudioDeviceID sdl_audio_dev;
+
 
 	SDL_zero(want);
 	want.freq = HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND;
@@ -397,9 +402,9 @@ internal SDL_AudioDeviceID init_audio(struct audio_context *audio_ctx)
 	audio_allow_change =
 	    SDL_AUDIO_ALLOW_FORMAT_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
 
-	audio_dev =
+	sdl_audio_dev =
 	    SDL_OpenAudioDevice(NULL, 0, &want, &have, audio_allow_change);
-	if (audio_dev == 0) {
+	if (sdl_audio_dev == 0) {
 		fprintf(stderr, "Failed to open audio: %s\n", SDL_GetError());
 	}
 	if (have.format != want.format) {
@@ -410,7 +415,7 @@ internal SDL_AudioDeviceID init_audio(struct audio_context *audio_ctx)
 		printf("Expected %d audio channels, got %d.\n", want.channels,
 		       have.channels);
 	}
-	return audio_dev;
+	return sdl_audio_dev;
 }
 
 void fill_sound_buffer(struct game_context *ctx)
@@ -508,7 +513,7 @@ int main(int argc, char *argv[])
 	int x, y, width, height, shutdown;
 	SDL_Renderer *renderer;
 	SDL_Event event;
-	SDL_AudioDeviceID audio_dev;
+	SDL_AudioDeviceID sdl_audio_dev;
 	struct timespec start, last_sound, now, elapsed;
 	unsigned long total_elapsed_seconds;
 	double fps;
@@ -559,10 +564,14 @@ int main(int argc, char *argv[])
 
 	resize_texture_buffer(window, renderer, &texture_buf);
 
-	audio_dev = init_audio(&audio_ctx);
+	if (init_audio_context(&audio_ctx)) {
+		sdl_audio_dev = init_sdl_audio(&audio_ctx);
+	} else {
+		sdl_audio_dev = 0;
+	}
 	/* start audio playing by setting "pause" to zero */
-	if (audio_dev) {
-		SDL_PauseAudioDevice(audio_dev, 0);
+	if (sdl_audio_dev) {
+		SDL_PauseAudioDevice(sdl_audio_dev, 0);
 	}
 
 	event_ctx.event = &event;
@@ -619,8 +628,8 @@ int main(int argc, char *argv[])
 	}
 	fprintf(stderr, "\n");
 
-	if (audio_dev) {
-		SDL_CloseAudioDevice(audio_dev);
+	if (sdl_audio_dev) {
+		SDL_CloseAudioDevice(sdl_audio_dev);
 	}
 
 	/* we probably do not need to do these next steps */
