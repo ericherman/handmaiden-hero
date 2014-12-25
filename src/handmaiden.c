@@ -56,13 +56,13 @@ struct game_context {
 	int y_shift;
 };
 
-struct texture_buffer {
+struct sdl_texture_buffer {
 	SDL_Texture *texture;
 	struct pixel_buffer *pixel_buf;
 };
 
 struct sdl_event_context {
-	struct texture_buffer *texture_buf;
+	struct sdl_texture_buffer *texture_buf;
 	SDL_Window *window;
 	Uint32 win_id;
 	SDL_Renderer *renderer;
@@ -113,9 +113,9 @@ internal void resize_pixel_buffer(struct pixel_buffer *buf, int height,
 	buf->pitch = buf->width * buf->bytes_per_pixel;
 }
 
-internal void resize_texture_buffer(SDL_Window *window,
-				    SDL_Renderer *renderer,
-				    struct texture_buffer *texture_buf)
+internal void sdl_resize_texture_buf(SDL_Window *window,
+				     SDL_Renderer *renderer,
+				     struct sdl_texture_buffer *texture_buf)
 {
 	int height, width;
 	struct pixel_buffer *pixel_buf = texture_buf->pixel_buf;
@@ -167,8 +167,9 @@ internal void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
 	}
 }
 
-internal void blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
-			 const SDL_Rect *rect, const void *pixels, int pitch)
+internal void sdl_blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
+			     const SDL_Rect *rect, const void *pixels,
+			     int pitch)
 {
 	if (SDL_UpdateTexture(texture, rect, pixels, pitch)) {
 		fprintf(stderr, "Could not SDL_UpdateTexture\n");
@@ -178,15 +179,15 @@ internal void blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
 	SDL_RenderPresent(renderer);
 }
 
-internal void blit_texture(SDL_Renderer *renderer,
-			   struct texture_buffer *texture_buf)
+internal void sdl_blit_texture(SDL_Renderer *renderer,
+			       struct sdl_texture_buffer *texture_buf)
 {
 	SDL_Texture *texture = texture_buf->texture;
 	const SDL_Rect *rect = 0;
 	const void *pixels = texture_buf->pixel_buf->pixels;
 	int pitch = texture_buf->pixel_buf->pitch;
 
-	blit_bytes(renderer, texture, rect, pixels, pitch);
+	sdl_blit_bytes(renderer, texture, rect, pixels, pitch);
 }
 
 internal void process_key_event(struct sdl_event_context *event_ctx,
@@ -261,9 +262,9 @@ internal int process_event(struct sdl_event_context *event_ctx,
 			/* window resized to data1 x data2 */
 			/* always preceded by */
 			/* SDL_WINDOWEVENT_SIZE_CHANGED */
-			resize_texture_buffer(event_ctx->window,
-					      event_ctx->renderer,
-					      event_ctx->texture_buf);
+			sdl_resize_texture_buf(event_ctx->window,
+					       event_ctx->renderer,
+					       event_ctx->texture_buf);
 			break;
 		case SDL_WINDOWEVENT_SIZE_CHANGED:
 			/* either as a result of an API call */
@@ -436,7 +437,8 @@ void fill_sound_buffer(struct game_context *ctx)
 	tone_volume = 128;
 	square_wave_period = (HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND) / tone_hz;
 	half_square_wave_period = square_wave_period / 2;
-	bytes_per_sample = HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
+	bytes_per_sample =
+	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
 
 	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >=
 	    audio_ctx->sound_buffer_bytes) {
@@ -526,7 +528,7 @@ int main(int argc, char *argv[])
 	struct game_context ctx;
 	struct pixel_buffer virtual_win;
 	struct pixel_buffer blit_buf;
-	struct texture_buffer texture_buf;
+	struct sdl_texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
 	struct audio_context audio_ctx;
 
@@ -567,7 +569,7 @@ int main(int argc, char *argv[])
 		return 3;
 	}
 
-	resize_texture_buffer(window, renderer, &texture_buf);
+	sdl_resize_texture_buf(window, renderer, &texture_buf);
 
 	if (init_audio_context(&audio_ctx)) {
 		sdl_audio_dev = init_sdl_audio(&audio_ctx);
@@ -601,7 +603,7 @@ int main(int argc, char *argv[])
 		ctx.y_offset += ctx.y_shift;
 		fill_virtual(&ctx);
 		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
-		blit_texture(renderer, &texture_buf);
+		sdl_blit_texture(renderer, &texture_buf);
 		SDL_LockAudio();
 		fill_sound_buffer(&ctx);
 		SDL_UnlockAudio();
@@ -629,8 +631,7 @@ int main(int argc, char *argv[])
 				fps,
 				(double)frame_count /
 				(double)total_elapsed_seconds,
-				audio_ctx.play_cursor,
-				audio_ctx.write_cursor);
+				audio_ctx.play_cursor, audio_ctx.write_cursor);
 		}
 	}
 	fprintf(stderr, "\n");
