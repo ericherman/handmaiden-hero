@@ -620,10 +620,16 @@ int main(int argc, char *argv[])
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
-		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
+		/* first cleanup SDL stuff */
 		if (texture_buf.texture) {
 			SDL_DestroyTexture(texture_buf.texture);
 		}
+		SDL_DestroyRenderer(renderer);
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+
+		/* then collect our own garbage */
+		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
 		if (blit_buf.pixels) {
 			munmap(blit_buf.pixels, blit_buf.pixels_bytes_len);
 		}
@@ -631,8 +637,6 @@ int main(int argc, char *argv[])
 			munmap(audio_ctx.sound_buffer,
 			       audio_ctx.sound_buffer_bytes);
 		}
-		/* other stuff */
-		SDL_Quit();
 	}
 
 	return 0;
