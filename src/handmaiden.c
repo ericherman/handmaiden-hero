@@ -563,7 +563,7 @@ void fill_sound_buffer(struct game_context *ctx)
 	    buf_pos, starting_buf_pos, sample_value;
 	unsigned long stream_pos;
 	struct audio_context *audio_ctx;
-	double sine;
+	float sine;
 
 	audio_ctx = ctx->audio_ctx;
 
@@ -640,7 +640,7 @@ void fill_sound_buffer(struct game_context *ctx)
 	for (i = 0; i < sample_count; i++) {
 		stream_pos =
 		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		sine = sin(stream_pos * 2 * M_PI / tone_hz);
+		sine = sinf(stream_pos * 2 * M_PI / tone_hz);
 
 		sample_value = sine * tone_volume;
 
@@ -664,7 +664,7 @@ void fill_sound_buffer(struct game_context *ctx)
 	for (i = 0; i < sample_count; i++) {
 		stream_pos =
 		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		sine = sin(stream_pos * 2 * M_PI / tone_hz);
+		sine = sinf(stream_pos * 2 * M_PI / tone_hz);
 
 		sample_value = sine * tone_volume;
 
