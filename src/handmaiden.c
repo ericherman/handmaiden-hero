@@ -290,8 +290,8 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 	case SDL_SCANCODE_M:
 		if (!was_down) {
 			ctx->audio_ctx->volume =
-			    (ctx->audio_ctx->
-			     volume) ? 0 : HANDMAIDEN_AUDIO_START_VOLUME;
+			    (ctx->audio_ctx->volume) ?
+			    0 : HANDMAIDEN_AUDIO_START_VOLUME;
 		}
 		break;
 	default:
