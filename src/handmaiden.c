@@ -16,6 +16,10 @@
 
 #include <stdio.h>		/* fprintf */
 #include <time.h>		/* clock_gettime */
+#include <math.h>		/* sin */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #define FIRST_SUPPORTING -1
 #define NONE 0
@@ -48,8 +52,8 @@ struct pixel_buffer {
 struct audio_context {
 	unsigned int *sound_buffer;
 	unsigned int sound_buffer_bytes;
-	unsigned int write_cursor;
-	unsigned int play_cursor;
+	unsigned long int write_cursor;
+	unsigned long int play_cursor;
 	unsigned int volume;
 	FILE *log;
 };
@@ -548,11 +552,11 @@ internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
 
 void fill_sound_buffer(struct game_context *ctx)
 {
-	unsigned int tone_hz, tone_volume, square_wave_period,
-	    half_square_wave_period, bytes_per_sample, bytes_to_write,
+	unsigned int tone_hz, tone_volume, bytes_per_sample, bytes_to_write,
 	    region_1_bytes, region_2_bytes, sample_count, i, buf_pos,
 	    sample_value;
 	struct audio_context *audio_ctx;
+	double sine;
 
 	audio_ctx = ctx->audio_ctx;
 
@@ -560,8 +564,6 @@ void fill_sound_buffer(struct game_context *ctx)
 	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
 	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
 	tone_volume = audio_ctx->volume;
-	square_wave_period = (HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND) / tone_hz;
-	half_square_wave_period = square_wave_period / 2;
 	bytes_per_sample =
 	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
 
@@ -602,10 +604,12 @@ void fill_sound_buffer(struct game_context *ctx)
 	buf_pos = audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes;
 	sample_count = region_1_bytes / bytes_per_sample;
 	for (i = 0; i < sample_count; i++) {
-		sample_value =
-		    (((audio_ctx->write_cursor + buf_pos / bytes_per_sample) /
-		      half_square_wave_period) %
-		     2) ? tone_volume : -tone_volume;
+		sine =
+		    sin((((audio_ctx->write_cursor +
+			   buf_pos) / bytes_per_sample)) * M_PI / 180);
+
+		sample_value = sine * tone_volume;
+
 		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
 		    sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
@@ -618,10 +622,11 @@ void fill_sound_buffer(struct game_context *ctx)
 	sample_count = region_2_bytes / bytes_per_sample;
 	buf_pos = 0;
 	for (i = 0; i < sample_count; i++) {
-		sample_value =
-		    ((audio_ctx->write_cursor + buf_pos /
-		      half_square_wave_period) %
-		     2) ? tone_volume : -tone_volume;
+		sine =
+		    sin((((audio_ctx->write_cursor +
+			   buf_pos) / bytes_per_sample)) * M_PI / 180);
+
+		sample_value = sine * tone_volume;
 		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
 				  buf_pos) = sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
