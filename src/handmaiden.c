@@ -1,6 +1,6 @@
-#define ERIC_DEBUG 1
+#define ERIC_DEBUG 0
 #define FPS_PRINTER 0
-#define DEBUG_LOG_AUDIO 1
+#define DEBUG_LOG_AUDIO 0
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
 /* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
