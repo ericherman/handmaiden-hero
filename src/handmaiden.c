@@ -1,4 +1,4 @@
-#define ERIC_DEBUG 0
+#define ERIC_DEBUG 1
 #define FPS_PRINTER 0
 #define DEBUG_LOG_AUDIO 1
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
@@ -20,6 +20,9 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+/* watch out for side-effects of X or Y */
+#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 
 #define FIRST_SUPPORTING -1
 #define NONE 0
@@ -52,8 +55,8 @@ struct pixel_buffer {
 struct audio_context {
 	unsigned int *sound_buffer;
 	unsigned int sound_buffer_bytes;
-	unsigned long int write_cursor;
-	unsigned long int play_cursor;
+	unsigned int write_cursor;
+	unsigned int play_cursor;
 	unsigned int volume;
 	FILE *log;
 };
@@ -441,6 +444,7 @@ void audio_callback(void *userdata, unsigned char *stream, int len)
 			fwrite(audio_ctx->sound_buffer, 1,
 			       region_2_bytes, audio_ctx->log);
 		}
+		debug(1, "callback region_2_bytes: %u\n", region_2_bytes);
 		audio_ctx->play_cursor += region_2_bytes;
 	}
 }
@@ -463,8 +467,9 @@ internal unsigned int init_audio_context(struct audio_context *audio_ctx)
 	    (1.0 * (double)samples_per_buffer) /
 	    (1.0 * (double)HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND);
 
-	debug(1, "sound buffer = %d samples (%f seconds)\n",
-	      samples_per_buffer, seconds_per_buffer);
+	debug(1, "sound buffer = %d bytes (%d samples) (%f seconds)\n",
+	      HANDMAIDEN_AUDIO_BUF_SIZE, samples_per_buffer,
+	      seconds_per_buffer);
 
 	audio_ctx->sound_buffer =
 	    (unsigned int *)mmap(0, audio_ctx->sound_buffer_bytes,
@@ -552,9 +557,9 @@ internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
 
 void fill_sound_buffer(struct game_context *ctx)
 {
-	unsigned int tone_hz, tone_volume, bytes_per_sample, bytes_to_write,
-	    region_1_bytes, region_2_bytes, sample_count, i, buf_pos,
-	    sample_value;
+	unsigned int tone_hz, tone_volume, bytes_per_sample_all_chans,
+	    bytes_to_write, region_1_bytes, region_2_bytes, sample_count, i,
+	    buf_pos, starting_buf_pos, sample_value;
 	unsigned long stream_pos;
 	struct audio_context *audio_ctx;
 	double sine;
@@ -565,50 +570,80 @@ void fill_sound_buffer(struct game_context *ctx)
 	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
 	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
 	tone_volume = audio_ctx->volume;
-	bytes_per_sample =
+	bytes_per_sample_all_chans =
 	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
 
 	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >=
 	    audio_ctx->sound_buffer_bytes) {
-		debug(3, "no room to write more sound data\n");
+		debug(1, "fill: no room to write more sound data\n");
 		return;
 	}
 
-	bytes_to_write =
-	    audio_ctx->sound_buffer_bytes - (audio_ctx->write_cursor -
-					     audio_ctx->play_cursor);
-	debug(2,
-	      "play_cursor_pos:  %u\nwrite_cursor_pos: %u\nbytes_to_write: %u\n",
-	      audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes,
-	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes,
-	      bytes_to_write);
-
-	if (((audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes) >=
+	if (((audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes) >
 	     (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes))
-	    && (bytes_to_write >
-		(audio_ctx->sound_buffer_bytes -
-		 (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes)))) {
-		region_1_bytes =
-		    (audio_ctx->sound_buffer_bytes -
-		     (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes));
-		region_2_bytes = bytes_to_write - region_1_bytes;
+	    || (audio_ctx->write_cursor == audio_ctx->play_cursor)) {
+		bytes_to_write =
+		    audio_ctx->sound_buffer_bytes - (audio_ctx->write_cursor -
+						     audio_ctx->play_cursor);
 	} else {
-		region_1_bytes = bytes_to_write;;
-		region_2_bytes = 0;
+		bytes_to_write =
+		    (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) -
+		    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
 	}
-	debug(1, "region_1_bytes: %u\nregion_2_bytes: %u\n", region_1_bytes,
-	      region_2_bytes);
+
+	if ((audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) >=
+	    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes)) {
+		region_1_bytes = bytes_to_write;
+		region_2_bytes = 0;
+		if ((audio_ctx->play_cursor != audio_ctx->write_cursor)
+		    && (region_1_bytes >
+			((audio_ctx->play_cursor %
+			  audio_ctx->sound_buffer_bytes) -
+			 (audio_ctx->write_cursor %
+			  audio_ctx->sound_buffer_bytes)))) {
+			debug(0, "region 1 over-writing play_cursor\n");
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		region_1_bytes =
+		    min(bytes_to_write,
+			(audio_ctx->sound_buffer_bytes -
+			 ((audio_ctx->play_cursor %
+			   audio_ctx->sound_buffer_bytes))));
+		region_2_bytes = bytes_to_write - region_1_bytes;
+		if (region_2_bytes >
+		    ((audio_ctx->play_cursor %
+		      audio_ctx->sound_buffer_bytes))) {
+			debug(0, "region 2 over-writing play_cursor\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	debug(1,
+	      "fill: (in)  play_cursor: %u (%u) write_cursor: %u (%u) bytes to write: %u\n",
+	      audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes,
+	      audio_ctx->play_cursor,
+	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes,
+	      audio_ctx->write_cursor, bytes_to_write);
+
+	debug(1, "fill: region_1_bytes: %u region_2_bytes: %u\n",
+	      region_1_bytes, region_2_bytes);
 
 	if (audio_ctx->write_cursor % HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE) {
-		debug(0, "unexpected audio position\n");
+		debug(0, "fill: unexpected audio position\n");
 	}
+
 	buf_pos = audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes;
-	sample_count = region_1_bytes / bytes_per_sample;
+	starting_buf_pos = buf_pos;
+	sample_count = region_1_bytes / bytes_per_sample_all_chans;
 	for (i = 0; i < sample_count; i++) {
-		stream_pos = i + (audio_ctx->write_cursor / bytes_per_sample);
+		stream_pos =
+		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
+		/* include the tone_hz */
 		sine = sin(stream_pos * M_PI / 180);
 
-		sample_value = sine * tone_volume;
+		sample_value =
+		    sine * tone_volume * (((double)stream_pos) / 48000.0);
 
 		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
 		    sample_value;
@@ -617,15 +652,24 @@ void fill_sound_buffer(struct game_context *ctx)
 		    sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
-	audio_ctx->write_cursor += buf_pos;
+	debug(1, "fill: region 1 wrote %u bytes (%u samples)\n",
+	      (buf_pos - starting_buf_pos), sample_count);
+	audio_ctx->write_cursor += (buf_pos - starting_buf_pos);
+	debug(1, "fill: write cursor moved to %u (%u)\n",
+	      audio_ctx->write_cursor,
+	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
 
-	sample_count = region_2_bytes / bytes_per_sample;
+	sample_count = region_2_bytes / bytes_per_sample_all_chans;
 	buf_pos = 0;
+	starting_buf_pos = buf_pos;
 	for (i = 0; i < sample_count; i++) {
-		stream_pos = i + (audio_ctx->write_cursor / bytes_per_sample);
+		stream_pos =
+		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
 		sine = sin(stream_pos * M_PI / 180);
 
-		sample_value = sine * tone_volume;
+		sample_value =
+		    sine * tone_volume * (((double)stream_pos) / 48000.0);
+
 		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
 				  buf_pos) = sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
@@ -633,14 +677,30 @@ void fill_sound_buffer(struct game_context *ctx)
 				  buf_pos) = sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
-	audio_ctx->write_cursor += buf_pos;
+	debug(1, "fill: region 2 wrote %u bytes (%u samples)\n",
+	      (buf_pos - starting_buf_pos), sample_count);
+	audio_ctx->write_cursor += (buf_pos - starting_buf_pos);
+	debug(1, "fill: write cursor moved to %u (%u)\n",
+	      audio_ctx->write_cursor,
+	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
 	debug(1,
-	      "play_cursor:  %u (%u)\nwrite_cursor: %u (%u)\nbytes avail: %u\n",
+	      "fill: (out) play_cursor: %u (%u) write_cursor: %u (%u) bytes avail: %u\n",
 	      audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes,
 	      audio_ctx->play_cursor,
 	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes,
 	      audio_ctx->write_cursor,
 	      audio_ctx->write_cursor - audio_ctx->play_cursor);
+
+	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >
+	    audio_ctx->sound_buffer_bytes) {
+		debug(0,
+		      "write_cursor: %u, play_cursor: %u diff: %d, bufsize: %u\n",
+		      audio_ctx->write_cursor, audio_ctx->play_cursor,
+		      (audio_ctx->write_cursor - audio_ctx->play_cursor),
+		      audio_ctx->sound_buffer_bytes);
+		exit(EXIT_FAILURE);
+	}
+	debug(1, "fill: done.\n");
 }
 
 void diff_timespecs(struct timespec start, struct timespec end,
