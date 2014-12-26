@@ -1,0 +1,42 @@
+--- a/src/handmaiden.c	2014-12-26 12:44:23.929224781 +0100
++++ b/src/handmaiden.c	2014-12-26 12:44:30.377224530 +0100
+@@ -169,8 +169,8 @@
+ 	buf->pitch = buf->width * buf->bytes_per_pixel;
+ }
+ 
+-internal void sdl_resize_texture_buf(SDL_Window * window,
+-				     SDL_Renderer * renderer,
++internal void sdl_resize_texture_buf(SDL_Window *window,
++				     SDL_Renderer *renderer,
+ 				     struct sdl_texture_buffer *texture_buf)
+ {
+ 	int height, width;
+@@ -222,8 +222,8 @@
+ 	}
+ }
+ 
+-internal void sdl_blit_bytes(SDL_Renderer * renderer, SDL_Texture * texture,
+-			     const SDL_Rect * rect, const void *pixels,
++internal void sdl_blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
++			     const SDL_Rect *rect, const void *pixels,
+ 			     int pitch)
+ {
+ 	if (SDL_UpdateTexture(texture, rect, pixels, pitch)) {
+@@ -234,7 +234,7 @@
+ 	SDL_RenderPresent(renderer);
+ }
+ 
+-internal void sdl_blit_texture(SDL_Renderer * renderer,
++internal void sdl_blit_texture(SDL_Renderer *renderer,
+ 			       struct sdl_texture_buffer *texture_buf)
+ {
+ 	SDL_Texture *texture = texture_buf->texture;
+@@ -483,7 +483,7 @@
+ 	return audio_ctx->sound_buffer ? 1 : 0;
+ }
+ 
+-internal SDL_AudioDeviceID sdl_init_audio(struct audio_context * audio_ctx)
++internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
+ {
+ 	int audio_allow_change;
+ 	SDL_AudioSpec want, have;
