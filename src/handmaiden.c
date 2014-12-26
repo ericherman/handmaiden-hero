@@ -34,7 +34,7 @@
 */
 
 /* audio config constants */
-#define HANDMAIDEN_AUDIO_START_VOLUME 64
+#define HANDMAIDEN_AUDIO_START_VOLUME 16
 #define HANDMAIDEN_AUDIO_BUF_CHUNKS 4
 #define HANDMAIDEN_AUDIO_BUF_SIZE (HANDMAIDEN_AUDIO_BUF_CHUNKS * 65536)
 #define HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND 48000
@@ -290,7 +290,8 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 	case SDL_SCANCODE_M:
 		if (!was_down) {
 			ctx->audio_ctx->volume =
-			    (ctx->audio_ctx->volume) ? 0 : 64;
+			    (ctx->audio_ctx->
+			     volume) ? 0 : HANDMAIDEN_AUDIO_START_VOLUME;
 		}
 		break;
 	default:
@@ -639,11 +640,9 @@ void fill_sound_buffer(struct game_context *ctx)
 	for (i = 0; i < sample_count; i++) {
 		stream_pos =
 		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		/* include the tone_hz */
-		sine = sin(stream_pos * M_PI / 180);
+		sine = sin(stream_pos * 2 * M_PI / tone_hz);
 
-		sample_value =
-		    sine * tone_volume * (((double)stream_pos) / 48000.0);
+		sample_value = sine * tone_volume;
 
 		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
 		    sample_value;
@@ -665,10 +664,9 @@ void fill_sound_buffer(struct game_context *ctx)
 	for (i = 0; i < sample_count; i++) {
 		stream_pos =
 		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		sine = sin(stream_pos * M_PI / 180);
+		sine = sin(stream_pos * 2 * M_PI / tone_hz);
 
-		sample_value =
-		    sine * tone_volume * (((double)stream_pos) / 48000.0);
+		sample_value = sine * tone_volume;
 
 		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
 				  buf_pos) = sample_value;
