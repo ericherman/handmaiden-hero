@@ -1,5 +1,6 @@
 #define ERIC_DEBUG 0
 #define FPS_PRINTER 0
+#define DEBUG_LOG_AUDIO 1
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
 /* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
@@ -26,12 +27,13 @@
 */
 
 /* audio config constants */
-#define HANDMAIDEN_AUDIO_START_VOLUME 0
+#define HANDMAIDEN_AUDIO_START_VOLUME 64
 #define HANDMAIDEN_AUDIO_BUF_CHUNKS 4
 #define HANDMAIDEN_AUDIO_BUF_SIZE (HANDMAIDEN_AUDIO_BUF_CHUNKS * 65536)
 #define HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND 48000
 #define HANDMAIDEN_AUDIO_CHANNELS 2
 #define HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE sizeof(unsigned int)
+#define DEBUG_AUDIO_LOG_PATH "/tmp/debug_audio_log"
 
 struct pixel_buffer {
 	int width;
@@ -49,6 +51,7 @@ struct audio_context {
 	unsigned int write_cursor;
 	unsigned int play_cursor;
 	unsigned int volume;
+	FILE *log;
 };
 
 struct game_context {
@@ -86,6 +89,42 @@ internal int debug(int debug_level, const char *fmt, ...)
 	bytes = vfprintf(stderr, fmt, args);
 	va_end(args);
 	return bytes;
+}
+
+internal void close_audio_debug_logging(struct audio_context *audio_ctx)
+{
+	FILE *audio_log;
+	unsigned int i, items_read, sample_num;
+	int buf[4096];
+
+	if (!audio_ctx->log) {
+		return;
+	}
+
+	fclose(audio_ctx->log);
+	audio_ctx->log = fopen(DEBUG_AUDIO_LOG_PATH, "r");
+
+	if (!audio_ctx->log) {
+		debug(0, "can not re-open %s?\n", DEBUG_AUDIO_LOG_PATH);
+		return;
+	}
+	audio_log = fopen(DEBUG_AUDIO_LOG_PATH ".txt", "w");
+	if (!audio_log) {
+		debug(0, "Can not open %s?\n", DEBUG_AUDIO_LOG_PATH ".txt");
+		return;
+	}
+	sample_num = 0;
+	while ((items_read = fread(&buf, 4, 4096, audio_ctx->log))) {
+		for (i = 0; i < items_read; i++) {
+			fprintf(audio_log, "%u, %d\n", ++sample_num, buf[i]);
+		}
+	}
+	if (audio_ctx->log) {
+		fclose(audio_ctx->log);
+	}
+	if (audio_log) {
+		fclose(audio_log);
+	}
 }
 
 internal void fill_virtual(struct game_context *ctx)
@@ -382,12 +421,22 @@ void audio_callback(void *userdata, unsigned char *stream, int len)
 		       ((unsigned char *)(audio_ctx->sound_buffer)) +
 		       (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes),
 		       region_1_bytes);
+		if (audio_ctx->log) {
+			fwrite(((unsigned char *)(audio_ctx->sound_buffer)) +
+			       (audio_ctx->play_cursor %
+				audio_ctx->sound_buffer_bytes), 1,
+			       region_1_bytes, audio_ctx->log);
+		}
 		audio_ctx->play_cursor += region_1_bytes;
 	}
 
 	if (region_2_bytes) {
 		memcpy(&stream[region_1_bytes], audio_ctx->sound_buffer,
 		       region_2_bytes);
+		if (audio_ctx->log) {
+			fwrite(audio_ctx->sound_buffer, 1,
+			       region_2_bytes, audio_ctx->log);
+		}
 		audio_ctx->play_cursor += region_2_bytes;
 	}
 }
@@ -420,6 +469,15 @@ internal unsigned int init_audio_context(struct audio_context *audio_ctx)
 
 	if (!audio_ctx->sound_buffer) {
 		debug(0, "could not allocate sound buffer\n");
+	}
+
+	if (DEBUG_LOG_AUDIO) {
+		audio_ctx->log = fopen(DEBUG_AUDIO_LOG_PATH, "w");
+		if (!audio_ctx->log) {
+			debug(0, "could not fopen %s\n", DEBUG_AUDIO_LOG_PATH);
+		}
+	} else {
+		audio_ctx->log = NULL;
 	}
 
 	return audio_ctx->sound_buffer ? 1 : 0;
@@ -548,11 +606,11 @@ void fill_sound_buffer(struct game_context *ctx)
 		    (((audio_ctx->write_cursor + buf_pos / bytes_per_sample) /
 		      half_square_wave_period) %
 		     2) ? tone_volume : -tone_volume;
-		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
-				  buf_pos) = sample_value;
+		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
+		    sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
-		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
-				  buf_pos) = sample_value;
+		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
+		    sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
 	audio_ctx->write_cursor += buf_pos;
@@ -723,6 +781,7 @@ int main(int argc, char *argv[])
 	if (sdl_audio_dev) {
 		SDL_CloseAudioDevice(sdl_audio_dev);
 	}
+	close_audio_debug_logging(&audio_ctx);
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
