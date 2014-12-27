@@ -1,12 +1,18 @@
 #define FPS_PRINTER 0
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
+#include "handmaiden.h"
+
+#define internal static
+/*
+#define global_variable static
+#define local_persistant static
+*/
+
 /* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
 #define _GNU_SOURCE
 /* clock_gettime in time.h requires _POSIX_C_SOURCE 199309 */
 #define _POSIX_C_SOURCE 199309
-
-#include "handmaiden.c"
 
 #include <sys/mman.h>
 /* end mmap includes */

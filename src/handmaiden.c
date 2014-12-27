@@ -1,7 +1,3 @@
-#define ERIC_DEBUG 0
-#define FPS_PRINTER 0
-#define DEBUG_LOG_AUDIO 0
-#define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
 #include "handmaiden.h"
 
@@ -17,49 +13,7 @@
 /* watch out for side-effects of X or Y */
 #define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 
-#define internal static
-/*
-#define global_variable static
-#define local_persistant static
-*/
-
-/* audio config constants */
-#define HANDMAIDEN_AUDIO_START_VOLUME 16
-#define HANDMAIDEN_AUDIO_BUF_CHUNKS 4
-#define HANDMAIDEN_AUDIO_BUF_SIZE (HANDMAIDEN_AUDIO_BUF_CHUNKS * 65536)
-#define HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND 48000
-#define HANDMAIDEN_AUDIO_CHANNELS 2
-#define HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE sizeof(unsigned int)
-
-struct pixel_buffer {
-	int width;
-	int height;
-	unsigned int *pixels;
-	unsigned char bytes_per_pixel;
-	unsigned int pixels_bytes_len;
-	/* bytes in a row of pixel data, including padding */
-	unsigned int pitch;
-};
-
-struct audio_context {
-	unsigned int *sound_buffer;
-	unsigned int sound_buffer_bytes;
-	unsigned int write_cursor;
-	unsigned int play_cursor;
-	unsigned int volume;
-	FILE *log;
-};
-
-struct game_context {
-	struct pixel_buffer *virtual_win;
-	struct audio_context *audio_ctx;
-	unsigned char x_offset;
-	unsigned char y_offset;
-	int x_shift;
-	int y_shift;
-};
-
-internal int debug(int debug_level, const char *fmt, ...)
+int debug(int debug_level, const char *fmt, ...)
 {
 	int bytes;
 	va_list args;
@@ -74,7 +28,7 @@ internal int debug(int debug_level, const char *fmt, ...)
 	return bytes;
 }
 
-internal void close_audio_debug_logging(struct audio_context *audio_ctx)
+void close_audio_debug_logging(struct audio_context *audio_ctx)
 {
 	FILE *audio_log;
 	unsigned int i, items_read, sample_num;
@@ -84,7 +38,7 @@ internal void close_audio_debug_logging(struct audio_context *audio_ctx)
 		return;
 	}
 
-	fclose(audio_ctx->log);
+	fclose((FILE *) audio_ctx->log);
 	audio_ctx->log = fopen(debug_audio_bin_log_path(), "r");
 
 	if (!audio_ctx->log) {
@@ -103,14 +57,14 @@ internal void close_audio_debug_logging(struct audio_context *audio_ctx)
 		}
 	}
 	if (audio_ctx->log) {
-		fclose(audio_ctx->log);
+		fclose((FILE *) audio_ctx->log);
 	}
 	if (audio_log) {
 		fclose(audio_log);
 	}
 }
 
-internal void fill_virtual(struct game_context *ctx)
+void fill_virtual(struct game_context *ctx)
 {
 	struct pixel_buffer *virtual_win = ctx->virtual_win;
 	int x, y;
@@ -130,8 +84,7 @@ internal void fill_virtual(struct game_context *ctx)
 	}
 }
 
-internal void resize_pixel_buffer(struct pixel_buffer *buf, int height,
-				  int width)
+void resize_pixel_buffer(struct pixel_buffer *buf, int height, int width)
 {
 	debug(0, "Buffer was %d x %d, need %d x %d\n",
 	      buf->width, buf->height, width, height);
@@ -150,8 +103,8 @@ internal void resize_pixel_buffer(struct pixel_buffer *buf, int height,
 	buf->pitch = buf->width * buf->bytes_per_pixel;
 }
 
-internal void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
-					 struct pixel_buffer *virtual_win)
+void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
+				struct pixel_buffer *virtual_win)
 {
 	int x, y, virt_x, virt_y;
 	float x_ratio, y_ratio;
@@ -173,7 +126,7 @@ internal void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
 	}
 }
 
-internal void pixel_buffer_init(struct pixel_buffer *buf)
+void pixel_buffer_init(struct pixel_buffer *buf)
 {
 	buf->width = 0;
 	buf->height = 0;
@@ -222,7 +175,7 @@ void copy_audio(struct audio_context *audio_ctx, unsigned char *stream, int len)
 			fwrite(((unsigned char *)(audio_ctx->sound_buffer)) +
 			       (audio_ctx->play_cursor %
 				audio_ctx->sound_buffer_bytes), 1,
-			       region_1_bytes, audio_ctx->log);
+			       region_1_bytes, (FILE *) audio_ctx->log);
 		}
 		audio_ctx->play_cursor += region_1_bytes;
 	}
@@ -232,14 +185,14 @@ void copy_audio(struct audio_context *audio_ctx, unsigned char *stream, int len)
 		       region_2_bytes);
 		if (audio_ctx->log) {
 			fwrite(audio_ctx->sound_buffer, 1,
-			       region_2_bytes, audio_ctx->log);
+			       region_2_bytes, (FILE *) audio_ctx->log);
 		}
 		debug(1, "callback region_2_bytes: %u\n", region_2_bytes);
 		audio_ctx->play_cursor += region_2_bytes;
 	}
 }
 
-internal unsigned int init_audio_context(struct audio_context *audio_ctx)
+unsigned int init_audio_context(struct audio_context *audio_ctx)
 {
 	int samples_per_buffer;
 	double seconds_per_buffer;
