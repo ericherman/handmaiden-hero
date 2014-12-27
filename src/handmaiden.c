@@ -4,7 +4,6 @@
 #include <string.h>		/* memcpy */
 #include <stdio.h>		/* fprintf */
 #include <stdarg.h>		/* va_start */
-#include <stdlib.h>		/* exit */
 #include <math.h>		/* sin */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -84,9 +83,9 @@ void fill_virtual(struct game_context *ctx)
 	}
 }
 
-void resize_pixel_buffer(struct pixel_buffer *buf, int height, int width)
+void *resize_pixel_buffer(struct pixel_buffer *buf, int height, int width)
 {
-	debug(0, "Buffer was %d x %d, need %d x %d\n",
+	debug(1, "Buffer was %d x %d, need %d x %d\n",
 	      buf->width, buf->height, width, height);
 	if (buf->pixels) {
 		platform_free(buf->pixels, buf->pixels_bytes_len);
@@ -94,13 +93,13 @@ void resize_pixel_buffer(struct pixel_buffer *buf, int height, int width)
 	buf->width = width;
 	buf->height = height;
 	buf->pixels_bytes_len = buf->height * buf->width * buf->bytes_per_pixel;
+	buf->pitch = buf->width * buf->bytes_per_pixel;
 	buf->pixels = platform_alloc(buf->pixels_bytes_len);
 	if (!buf->pixels) {
 		debug(0, "Could not alloc buf->pixels (%d)\n",
 		      buf->pixels_bytes_len);
-		exit(EXIT_FAILURE);
 	}
-	buf->pitch = buf->width * buf->bytes_per_pixel;
+	return buf->pixels;
 }
 
 void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
@@ -233,7 +232,7 @@ unsigned int init_audio_context(struct audio_context *audio_ctx)
 	return audio_ctx->sound_buffer ? 1 : 0;
 }
 
-void fill_sound_buffer(struct game_context *ctx)
+long fill_sound_buffer(struct game_context *ctx)
 {
 	unsigned int tone_hz, tone_volume, bytes_per_sample_all_chans,
 	    bytes_to_write, region_1_bytes, region_2_bytes, sample_count, i,
@@ -254,7 +253,7 @@ void fill_sound_buffer(struct game_context *ctx)
 	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >=
 	    audio_ctx->sound_buffer_bytes) {
 		debug(1, "fill: no room to write more sound data\n");
-		return;
+		return 0;
 	}
 
 	if (((audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes) >
@@ -280,7 +279,7 @@ void fill_sound_buffer(struct game_context *ctx)
 			 (audio_ctx->write_cursor %
 			  audio_ctx->sound_buffer_bytes)))) {
 			debug(0, "region 1 over-writing play_cursor\n");
-			exit(EXIT_FAILURE);
+			return -1;
 		}
 	} else {
 		region_1_bytes =
@@ -293,7 +292,7 @@ void fill_sound_buffer(struct game_context *ctx)
 		    ((audio_ctx->play_cursor %
 		      audio_ctx->sound_buffer_bytes))) {
 			debug(0, "region 2 over-writing play_cursor\n");
-			exit(EXIT_FAILURE);
+			return -1;
 		}
 	}
 
@@ -373,7 +372,8 @@ void fill_sound_buffer(struct game_context *ctx)
 		      audio_ctx->write_cursor, audio_ctx->play_cursor,
 		      (audio_ctx->write_cursor - audio_ctx->play_cursor),
 		      audio_ctx->sound_buffer_bytes);
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 	debug(1, "fill: done.\n");
+	return (long) (region_1_bytes + region_2_bytes);
 }

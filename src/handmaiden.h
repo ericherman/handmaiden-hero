@@ -52,10 +52,10 @@ void copy_audio(struct audio_context *audio_ctx, unsigned char *stream,
 		int len);
 void close_audio_debug_logging(struct audio_context *audio_ctx);
 
-void fill_sound_buffer(struct game_context *ctx);
+long fill_sound_buffer(struct game_context *ctx);
 
 void fill_virtual(struct game_context *ctx);
-void resize_pixel_buffer(struct pixel_buffer *buf, int height, int width);
+void *resize_pixel_buffer(struct pixel_buffer *buf, int height, int width);
 void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
 				struct pixel_buffer *virtual_win);
 void pixel_buffer_init(struct pixel_buffer *buf);

@@ -89,7 +89,10 @@ internal void sdl_resize_texture_buf(SDL_Window *window,
 		exit(EXIT_FAILURE);
 	}
 
-	resize_pixel_buffer(pixel_buf, height, width);
+	if (!resize_pixel_buffer(pixel_buf, height, width)) {
+		debug(0, "Could not resize pixel_buffer\n");
+		exit(EXIT_FAILURE);
+	}
 }
 
 internal void sdl_blit_bytes(SDL_Renderer *renderer, SDL_Texture *texture,
@@ -356,7 +359,10 @@ int main(int argc, char *argv[])
 
 	height = 480;
 	width = 640;
-	resize_pixel_buffer(&virtual_win, height, width);
+	if (!resize_pixel_buffer(&virtual_win, height, width)) {
+		debug(0, "Could not resize pixel_buffer\n");
+		exit(EXIT_FAILURE);
+	}
 
 	ctx.virtual_win = &virtual_win;
 	ctx.audio_ctx = &audio_ctx;
@@ -419,7 +425,9 @@ int main(int argc, char *argv[])
 		if ((audio_ctx.write_cursor - audio_ctx.play_cursor) <
 		    audio_ctx.sound_buffer_bytes) {
 			SDL_LockAudio();
-			fill_sound_buffer(&ctx);
+			if (fill_sound_buffer(&ctx) < 0) {
+				shutdown = 1;
+			}
 			SDL_UnlockAudio();
 		}
 		frame_count++;
