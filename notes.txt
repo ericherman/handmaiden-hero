@@ -1,4 +1,19 @@
+
 2014-12-26
+
+commit 892ff92 is approximate linux+SDL parity with
+Handmade Hero Day 011 - The Basics of Platform API Design
+https://www.youtube.com/watch?v=_4vnV2Eng7M
+
+It should be noted that the platform independent code is not enforced
+to be platform independent as it could be because the #defines for
+_GNU and _POSIX currently happen before the inclusion of the independent
+due to conflicting imports. This can be addressed in a couple of ways.
+Having the platform independent code call ABSOLUTELY no standard C library
+includes would work. Also it is possible that very careful inclusion order
+might work. Wrapping libc code (printf and friends) as platform code would
+work. Or, retreating from a single the monolithic build to platform and
+non-platform build steps, plus a linking step would work.
 
 commit 8f2447bc is approximate linux+SDL parity with
 Handmade Hero Day 009 - Variable-Pitch Sine Wave Output
