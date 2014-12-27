@@ -4,7 +4,6 @@
 #define ERIC_DEBUG 0
 #define DEBUG_LOG_AUDIO 0
 
-
 /* audio config constants */
 #define HANDMAIDEN_AUDIO_START_VOLUME 16
 #define HANDMAIDEN_AUDIO_BUF_CHUNKS 4
@@ -56,8 +55,7 @@ long fill_sound_buffer(struct game_context *ctx);
 
 void fill_virtual(struct game_context *ctx);
 void *resize_pixel_buffer(struct pixel_buffer *buf, int height, int width);
-void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
-				struct pixel_buffer *virtual_win);
+void stretch_buffer(struct pixel_buffer *from_buf, struct pixel_buffer *to_buf);
 void pixel_buffer_init(struct pixel_buffer *buf);
 
 int debug(int debug_level, const char *fmt, ...);

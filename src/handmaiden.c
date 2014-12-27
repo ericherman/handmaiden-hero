@@ -102,25 +102,24 @@ void *resize_pixel_buffer(struct pixel_buffer *buf, int height, int width)
 	return buf->pixels;
 }
 
-void fill_blit_buf_from_virtual(struct pixel_buffer *blit_buf,
-				struct pixel_buffer *virtual_win)
+void stretch_buffer(struct pixel_buffer *from_buf, struct pixel_buffer *to_buf)
 {
-	int x, y, virt_x, virt_y;
+	int x, y, from_x, from_y;
 	float x_ratio, y_ratio;
 	unsigned int foreground;
-	unsigned int virt_pos, off_pos;
+	unsigned int from_pos, to_pos;
 
-	y_ratio = virtual_win->height / (float)blit_buf->height;
-	x_ratio = virtual_win->width / (float)blit_buf->width;
+	y_ratio = from_buf->height / (float)to_buf->height;
+	x_ratio = from_buf->width / (float)to_buf->width;
 
-	for (y = 0; y < blit_buf->height; y++) {
-		virt_y = (int)(y * y_ratio);
-		for (x = 0; x < blit_buf->width; x++) {
-			virt_x = (int)(x * x_ratio);
-			virt_pos = (virt_y * virtual_win->width) + virt_x;
-			off_pos = (blit_buf->width * y) + x;
-			foreground = *(virtual_win->pixels + virt_pos);
-			*(blit_buf->pixels + off_pos) = foreground;
+	for (y = 0; y < to_buf->height; y++) {
+		from_y = (int)(y * y_ratio);
+		for (x = 0; x < to_buf->width; x++) {
+			from_x = (int)(x * x_ratio);
+			from_pos = (from_y * from_buf->width) + from_x;
+			to_pos = (to_buf->width * y) + x;
+			foreground = *(from_buf->pixels + from_pos);
+			*(to_buf->pixels + to_pos) = foreground;
 		}
 	}
 }
@@ -375,5 +374,5 @@ long fill_sound_buffer(struct game_context *ctx)
 		return -1;
 	}
 	debug(1, "fill: done.\n");
-	return (long) (region_1_bytes + region_2_bytes);
+	return (long)(region_1_bytes + region_2_bytes);
 }

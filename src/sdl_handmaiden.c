@@ -420,7 +420,7 @@ int main(int argc, char *argv[])
 		ctx.x_offset += ctx.x_shift;
 		ctx.y_offset += ctx.y_shift;
 		fill_virtual(&ctx);
-		fill_blit_buf_from_virtual(&blit_buf, &virtual_win);
+		stretch_buffer(&virtual_win, &blit_buf);
 		sdl_blit_texture(renderer, &texture_buf);
 		if ((audio_ctx.write_cursor - audio_ctx.play_cursor) <
 		    audio_ctx.sound_buffer_bytes) {
