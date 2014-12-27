@@ -1,8 +1,8 @@
---- a/src/sdl_handmaiden.c	2014-12-27 14:08:01.901659978 +0100
-+++ b/src/sdl_handmaiden.c	2014-12-27 14:08:08.317659728 +0100
-@@ -56,8 +56,8 @@
- 	SDL_Event *event;
- };
+--- a/src/sdl_handmaiden.c	2014-12-27 18:41:22.601020440 +0100
++++ b/src/sdl_handmaiden.c	2014-12-27 18:41:42.501019664 +0100
+@@ -152,8 +152,8 @@
+ 	buf->pitch = 0;
+ }
  
 -internal void sdl_resize_texture_buf(SDL_Window * window,
 -				     SDL_Renderer * renderer,
@@ -11,8 +11,8 @@
  				     struct sdl_texture_buffer *texture_buf)
  {
  	int height, width;
-@@ -86,8 +86,8 @@
- 	resize_pixel_buffer(pixel_buf, height, width);
+@@ -185,8 +185,8 @@
+ 	}
  }
  
 -internal void sdl_blit_bytes(SDL_Renderer * renderer, SDL_Texture * texture,
@@ -22,7 +22,7 @@
  			     int pitch)
  {
  	if (SDL_UpdateTexture(texture, rect, pixels, pitch)) {
-@@ -98,7 +98,7 @@
+@@ -197,7 +197,7 @@
  	SDL_RenderPresent(renderer);
  }
  

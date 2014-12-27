@@ -1,7 +1,8 @@
+/* sdl_handmaiden.c */
 #define FPS_PRINTER 0
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
 
-#include "handmaiden.c"
+#include "handmaiden.h"
 
 #define ERIC_DEBUG 0
 #define DEBUG_LOG_AUDIO 0
@@ -42,11 +43,6 @@
 /* watch out for side-effects of X or Y */
 #define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 
-#include <math.h>		/* sin */
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 internal void *platform_alloc(unsigned int len)
 {
 	return mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
@@ -81,12 +77,11 @@ struct sdl_event_context {
 	SDL_Event *event;
 };
 
-struct audio_context {
-	unsigned int *sound_buffer;
-	unsigned int sound_buffer_bytes;
+struct audio_ring_buffer {
+	unsigned int *buf;
+	unsigned int buf_len;
 	unsigned int write_cursor;
 	unsigned int play_cursor;
-	unsigned int volume;
 	void *log;
 };
 
@@ -108,7 +103,7 @@ internal int debug(int debug_level, const char *fmt, ...)
 internal void stretch_buffer(struct pixel_buffer *from_buf,
 			     struct pixel_buffer *to_buf)
 {
-	int x, y, from_x, from_y;
+	unsigned int x, y, from_x, from_y;
 	float x_ratio, y_ratio;
 	unsigned int foreground;
 	unsigned int from_pos, to_pos;
@@ -167,7 +162,8 @@ internal void sdl_resize_texture_buf(SDL_Window *window,
 
 	pixel_buf = texture_buf->pixel_buf;
 	SDL_GetWindowSize(window, &width, &height);
-	if (width == pixel_buf->width && height == pixel_buf->height) {
+	if ((width == (int)pixel_buf->width)
+	    && (height == (int)pixel_buf->height)) {
 		/* nothing to do */
 		return;
 	}
@@ -215,7 +211,6 @@ internal void sdl_blit_texture(SDL_Renderer *renderer,
 }
 
 internal void process_key_event(struct sdl_event_context *event_ctx,
-				struct audio_context *audio_ctx,
 				struct game_context *ctx)
 {
 	int was_down = ((event_ctx->event->key.repeat != 0)
@@ -252,9 +247,9 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 		break;
 	case SDL_SCANCODE_M:
 		if (!was_down) {
-			audio_ctx->volume =
-			    (audio_ctx->volume) ?
-			    0 : HANDMAIDEN_AUDIO_START_VOLUME;
+			ctx->sound_volume =
+			    (ctx->sound_volume) ? 0 :
+			    HANDMAIDEN_AUDIO_START_VOLUME;
 		}
 		break;
 	default:
@@ -263,7 +258,6 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 }
 
 internal int process_event(struct sdl_event_context *event_ctx,
-			   struct audio_context *audio_ctx,
 			   struct game_context *ctx)
 {
 	switch (event_ctx->event->type) {
@@ -272,7 +266,7 @@ internal int process_event(struct sdl_event_context *event_ctx,
 		break;
 	case SDL_KEYUP:
 	case SDL_KEYDOWN:
-		process_key_event(event_ctx, audio_ctx, ctx);
+		process_key_event(event_ctx, ctx);
 		break;
 	case SDL_WINDOWEVENT:
 		if (event_ctx->event->window.windowID != event_ctx->win_id) {
@@ -345,18 +339,20 @@ internal int process_event(struct sdl_event_context *event_ctx,
 	return 0;
 }
 
-internal void copy_audio(struct audio_context *audio_ctx, unsigned char *stream,
-			 int len)
+internal void copy_audio(struct audio_ring_buffer *audio_ring_buf,
+			 unsigned char *stream, int len)
 {
 	int region_1_bytes, region_2_bytes;
 
-	if (audio_ctx->write_cursor <= audio_ctx->play_cursor) {
+	if (audio_ring_buf->write_cursor <= audio_ring_buf->play_cursor) {
 		debug(0, "callback: we do not have any new sound data\n");
 		return;
 	}
-	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) <
+	if ((audio_ring_buf->write_cursor - audio_ring_buf->play_cursor) <
 	    (unsigned long)len) {
-		len = (audio_ctx->write_cursor - audio_ctx->play_cursor);
+		len =
+		    (audio_ring_buf->write_cursor -
+		     audio_ring_buf->play_cursor);
 		debug(0, "callback: we only have %d much new sound available\n",
 		      len);
 	}
@@ -368,49 +364,49 @@ internal void copy_audio(struct audio_context *audio_ctx, unsigned char *stream,
 
 	region_1_bytes = len;
 	region_2_bytes = 0;
-	if ((audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) + len >
-	    audio_ctx->sound_buffer_bytes) {
+	if ((audio_ring_buf->play_cursor % audio_ring_buf->buf_len) + len >
+	    audio_ring_buf->buf_len) {
 		region_1_bytes =
-		    audio_ctx->sound_buffer_bytes -
-		    (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes);
+		    audio_ring_buf->buf_len -
+		    (audio_ring_buf->play_cursor % audio_ring_buf->buf_len);
 		region_2_bytes = len - region_1_bytes;
 	}
 
 	if (region_1_bytes) {
 		memcpy(stream,
-		       ((unsigned char *)(audio_ctx->sound_buffer)) +
-		       (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes),
+		       ((unsigned char *)(audio_ring_buf->buf)) +
+		       (audio_ring_buf->play_cursor % audio_ring_buf->buf_len),
 		       region_1_bytes);
-		if (audio_ctx->log) {
-			fwrite(((unsigned char *)(audio_ctx->sound_buffer)) +
-			       (audio_ctx->play_cursor %
-				audio_ctx->sound_buffer_bytes), 1,
-			       region_1_bytes, (FILE *) audio_ctx->log);
+		if (audio_ring_buf->log) {
+			fwrite(((unsigned char *)(audio_ring_buf->buf)) +
+			       (audio_ring_buf->play_cursor %
+				audio_ring_buf->buf_len), 1,
+			       region_1_bytes, (FILE *) audio_ring_buf->log);
 		}
-		audio_ctx->play_cursor += region_1_bytes;
+		audio_ring_buf->play_cursor += region_1_bytes;
 	}
 
 	if (region_2_bytes) {
-		memcpy(&stream[region_1_bytes], audio_ctx->sound_buffer,
+		memcpy(&stream[region_1_bytes], audio_ring_buf->buf,
 		       region_2_bytes);
-		if (audio_ctx->log) {
-			fwrite(audio_ctx->sound_buffer, 1,
-			       region_2_bytes, (FILE *) audio_ctx->log);
+		if (audio_ring_buf->log) {
+			fwrite(audio_ring_buf->buf, 1,
+			       region_2_bytes, (FILE *) audio_ring_buf->log);
 		}
 		debug(1, "callback region_2_bytes: %u\n", region_2_bytes);
-		audio_ctx->play_cursor += region_2_bytes;
+		audio_ring_buf->play_cursor += region_2_bytes;
 	}
 }
 
-internal unsigned int init_audio_context(struct audio_context *audio_ctx)
+internal unsigned int init_audio_ring_buffer(struct audio_ring_buffer
+					     *audio_ring_buf)
 {
 	int samples_per_buffer;
 	double seconds_per_buffer;
 
-	audio_ctx->volume = HANDMAIDEN_AUDIO_START_VOLUME;
-	audio_ctx->write_cursor = 0;
-	audio_ctx->play_cursor = 0;
-	audio_ctx->sound_buffer_bytes = HANDMAIDEN_AUDIO_BUF_SIZE;
+	audio_ring_buf->write_cursor = 0;
+	audio_ring_buf->play_cursor = 0;
+	audio_ring_buf->buf_len = HANDMAIDEN_AUDIO_BUF_SIZE;
 
 	samples_per_buffer =
 	    HANDMAIDEN_AUDIO_BUF_SIZE / (HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE *
@@ -424,82 +420,90 @@ internal unsigned int init_audio_context(struct audio_context *audio_ctx)
 	      HANDMAIDEN_AUDIO_BUF_SIZE, samples_per_buffer,
 	      seconds_per_buffer);
 
-	audio_ctx->sound_buffer = platform_alloc(audio_ctx->sound_buffer_bytes);
+	audio_ring_buf->buf = platform_alloc(audio_ring_buf->buf_len);
 
-	if (!audio_ctx->sound_buffer) {
+	if (!audio_ring_buf->buf) {
 		debug(0, "could not allocate sound buffer\n");
 	}
 
 	if (DEBUG_LOG_AUDIO) {
-		audio_ctx->log = fopen(debug_audio_bin_log_path(), "w");
-		if (!audio_ctx->log) {
+		audio_ring_buf->log = fopen(debug_audio_bin_log_path(), "w");
+		if (!audio_ring_buf->log) {
 			debug(0, "could not fopen %s\n",
 			      debug_audio_bin_log_path());
 		}
 	} else {
-		audio_ctx->log = NULL;
+		audio_ring_buf->log = NULL;
 	}
 
-	return audio_ctx->sound_buffer ? 1 : 0;
+	return audio_ring_buf->buf ? 1 : 0;
 }
 
-internal long fill_sound_buffer(struct audio_context *audio_ctx,
-				struct game_context *ctx)
+internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
+			    struct game_context *ctx)
 {
-	unsigned int tone_hz, tone_volume, bytes_per_sample_all_chans,
+	unsigned int bytes_per_sample_all_chans,
 	    bytes_to_write, region_1_bytes, region_2_bytes, sample_count, i,
-	    buf_pos, starting_buf_pos, sample_value;
-	unsigned long stream_pos;
-	double sine;
+	    buf_pos, starting_buf_pos, left_sample_value, right_sample_value;
+	unsigned long sample_pos;
+	struct sample_buffer sample_buf;
 
-	tone_hz = 128;
-	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
-	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
-	tone_volume = audio_ctx->volume;
 	bytes_per_sample_all_chans =
 	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
 
-	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >=
-	    audio_ctx->sound_buffer_bytes) {
+	if ((audio_ring_buf->write_cursor - audio_ring_buf->play_cursor) >=
+	    audio_ring_buf->buf_len) {
 		debug(1, "fill: no room to write more sound data\n");
 		return 0;
 	}
 
-	if (((audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes) >
-	     (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes))
-	    || (audio_ctx->write_cursor == audio_ctx->play_cursor)) {
+	if (((audio_ring_buf->write_cursor % audio_ring_buf->buf_len) >
+	     (audio_ring_buf->play_cursor % audio_ring_buf->buf_len))
+	    || (audio_ring_buf->write_cursor == audio_ring_buf->play_cursor)) {
 		bytes_to_write =
-		    audio_ctx->sound_buffer_bytes - (audio_ctx->write_cursor -
-						     audio_ctx->play_cursor);
+		    audio_ring_buf->buf_len - (audio_ring_buf->write_cursor -
+					       audio_ring_buf->play_cursor);
 	} else {
 		bytes_to_write =
-		    (audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) -
-		    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
+		    (audio_ring_buf->play_cursor % audio_ring_buf->buf_len) -
+		    (audio_ring_buf->write_cursor % audio_ring_buf->buf_len);
 	}
 
-	if ((audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes) >=
-	    (audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes)) {
+	sample_buf.stream_pos =
+	    (audio_ring_buf->write_cursor / bytes_per_sample_all_chans);
+	sample_buf.num_samples = bytes_to_write / bytes_per_sample_all_chans;
+	sample_buf.samples = (int *)platform_alloc(bytes_to_write);
+
+	if (!sample_buf.samples) {
+		debug(0, "could not allocate sample_buf.samples[%u]\n",
+		      sample_buf.num_samples);
+		return -1;
+	}
+	update_sample_buf(ctx, &sample_buf);
+
+	if ((audio_ring_buf->play_cursor % audio_ring_buf->buf_len) >=
+	    (audio_ring_buf->write_cursor % audio_ring_buf->buf_len)) {
 		region_1_bytes = bytes_to_write;
 		region_2_bytes = 0;
-		if ((audio_ctx->play_cursor != audio_ctx->write_cursor)
+		if ((audio_ring_buf->play_cursor !=
+		     audio_ring_buf->write_cursor)
 		    && (region_1_bytes >
-			((audio_ctx->play_cursor %
-			  audio_ctx->sound_buffer_bytes) -
-			 (audio_ctx->write_cursor %
-			  audio_ctx->sound_buffer_bytes)))) {
+			((audio_ring_buf->play_cursor %
+			  audio_ring_buf->buf_len) -
+			 (audio_ring_buf->write_cursor %
+			  audio_ring_buf->buf_len)))) {
 			debug(0, "region 1 over-writing play_cursor\n");
 			return -1;
 		}
 	} else {
 		region_1_bytes =
 		    min(bytes_to_write,
-			(audio_ctx->sound_buffer_bytes -
-			 ((audio_ctx->play_cursor %
-			   audio_ctx->sound_buffer_bytes))));
+			(audio_ring_buf->buf_len -
+			 ((audio_ring_buf->play_cursor %
+			   audio_ring_buf->buf_len))));
 		region_2_bytes = bytes_to_write - region_1_bytes;
 		if (region_2_bytes >
-		    ((audio_ctx->play_cursor %
-		      audio_ctx->sound_buffer_bytes))) {
+		    ((audio_ring_buf->play_cursor % audio_ring_buf->buf_len))) {
 			debug(0, "region 2 over-writing play_cursor\n");
 			return -1;
 		}
@@ -507,92 +511,90 @@ internal long fill_sound_buffer(struct audio_context *audio_ctx,
 
 	debug(1,
 	      "fill: (in)  play_cursor: %u (%u) write_cursor: %u (%u) bytes to write: %u\n",
-	      audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes,
-	      audio_ctx->play_cursor,
-	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes,
-	      audio_ctx->write_cursor, bytes_to_write);
+	      audio_ring_buf->play_cursor % audio_ring_buf->buf_len,
+	      audio_ring_buf->play_cursor,
+	      audio_ring_buf->write_cursor % audio_ring_buf->buf_len,
+	      audio_ring_buf->write_cursor, bytes_to_write);
 
 	debug(1, "fill: region_1_bytes: %u region_2_bytes: %u\n",
 	      region_1_bytes, region_2_bytes);
 
-	if (audio_ctx->write_cursor % HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE) {
+	if (audio_ring_buf->write_cursor % HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE) {
 		debug(0, "fill: unexpected audio position\n");
 	}
 
-	buf_pos = audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes;
+	buf_pos = audio_ring_buf->write_cursor % audio_ring_buf->buf_len;
 	starting_buf_pos = buf_pos;
 	sample_count = region_1_bytes / bytes_per_sample_all_chans;
 	for (i = 0; i < sample_count; i++) {
-		stream_pos =
-		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		sine = sin(stream_pos * 2 * M_PI / tone_hz);
+		sample_pos = (i * 2);
+		left_sample_value = *(sample_buf.samples + sample_pos);
+		right_sample_value = *(sample_buf.samples + sample_pos + 1);
 
-		sample_value = sine * tone_volume;
-
-		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
-		    sample_value;
+		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
+		    left_sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
-		*(int *)(((unsigned char *)audio_ctx->sound_buffer) + buf_pos) =
-		    sample_value;
+		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
+		    right_sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
 	debug(1, "fill: region 1 wrote %u bytes (%u samples)\n",
 	      (buf_pos - starting_buf_pos), sample_count);
-	audio_ctx->write_cursor += (buf_pos - starting_buf_pos);
+	audio_ring_buf->write_cursor += (buf_pos - starting_buf_pos);
 	debug(1, "fill: write cursor moved to %u (%u)\n",
-	      audio_ctx->write_cursor,
-	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
+	      audio_ring_buf->write_cursor,
+	      audio_ring_buf->write_cursor % audio_ring_buf->buf_len);
 
 	sample_count = region_2_bytes / bytes_per_sample_all_chans;
 	buf_pos = 0;
 	starting_buf_pos = buf_pos;
 	for (i = 0; i < sample_count; i++) {
-		stream_pos =
-		    i + (audio_ctx->write_cursor / bytes_per_sample_all_chans);
-		sine = sin(stream_pos * 2 * M_PI / tone_hz);
+		sample_pos = (i * 2);
+		left_sample_value = *(sample_buf.samples + sample_pos);
+		right_sample_value = *(sample_buf.samples + sample_pos + 1);
 
-		sample_value = sine * tone_volume;
-
-		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
-				  buf_pos) = sample_value;
+		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
+		    left_sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
-		*(unsigned int *)(((unsigned char *)audio_ctx->sound_buffer) +
-				  buf_pos) = sample_value;
+		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
+		    right_sample_value;
 		buf_pos += HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE;
 	}
 	debug(1, "fill: region 2 wrote %u bytes (%u samples)\n",
 	      (buf_pos - starting_buf_pos), sample_count);
-	audio_ctx->write_cursor += (buf_pos - starting_buf_pos);
+	audio_ring_buf->write_cursor += (buf_pos - starting_buf_pos);
 	debug(1, "fill: write cursor moved to %u (%u)\n",
-	      audio_ctx->write_cursor,
-	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes);
+	      audio_ring_buf->write_cursor,
+	      audio_ring_buf->write_cursor % audio_ring_buf->buf_len);
 	debug(1,
 	      "fill: (out) play_cursor: %u (%u) write_cursor: %u (%u) bytes avail: %u\n",
-	      audio_ctx->play_cursor % audio_ctx->sound_buffer_bytes,
-	      audio_ctx->play_cursor,
-	      audio_ctx->write_cursor % audio_ctx->sound_buffer_bytes,
-	      audio_ctx->write_cursor,
-	      audio_ctx->write_cursor - audio_ctx->play_cursor);
+	      audio_ring_buf->play_cursor % audio_ring_buf->buf_len,
+	      audio_ring_buf->play_cursor,
+	      audio_ring_buf->write_cursor % audio_ring_buf->buf_len,
+	      audio_ring_buf->write_cursor,
+	      audio_ring_buf->write_cursor - audio_ring_buf->play_cursor);
 
-	if ((audio_ctx->write_cursor - audio_ctx->play_cursor) >
-	    audio_ctx->sound_buffer_bytes) {
+	if ((audio_ring_buf->write_cursor - audio_ring_buf->play_cursor) >
+	    audio_ring_buf->buf_len) {
 		debug(0,
 		      "write_cursor: %u, play_cursor: %u diff: %d, bufsize: %u\n",
-		      audio_ctx->write_cursor, audio_ctx->play_cursor,
-		      (audio_ctx->write_cursor - audio_ctx->play_cursor),
-		      audio_ctx->sound_buffer_bytes);
+		      audio_ring_buf->write_cursor, audio_ring_buf->play_cursor,
+		      (audio_ring_buf->write_cursor -
+		       audio_ring_buf->play_cursor), audio_ring_buf->buf_len);
 		return -1;
 	}
 	debug(1, "fill: done.\n");
+	platform_free(sample_buf.samples, bytes_to_write);
 	return (long)(region_1_bytes + region_2_bytes);
 }
 
 void sdl_audio_callback(void *userdata, unsigned char *stream, int len)
 {
-	copy_audio((struct audio_context *)userdata, stream, len);
+	copy_audio((struct audio_ring_buffer *)userdata, stream, len);
 }
 
-internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
+internal SDL_AudioDeviceID sdl_init_audio(struct audio_ring_buffer
+					  *audio_ring_buf)
 {
 	int audio_allow_change;
 	SDL_AudioSpec want, have;
@@ -623,7 +625,7 @@ internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
 					 HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE);
 
 	want.callback = &sdl_audio_callback;
-	want.userdata = audio_ctx;
+	want.userdata = audio_ring_buf;
 	audio_allow_change =
 	    SDL_AUDIO_ALLOW_FORMAT_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
 
@@ -655,20 +657,21 @@ internal SDL_AudioDeviceID sdl_init_audio(struct audio_context *audio_ctx)
 	return sdl_audio_dev;
 }
 
-internal void close_audio_debug_logging(struct audio_context *audio_ctx)
+internal void close_audio_debug_logging(struct audio_ring_buffer
+					*audio_ring_buf)
 {
 	FILE *audio_log;
 	unsigned int i, items_read, sample_num;
 	int buf[4096];
 
-	if (!audio_ctx->log) {
+	if (!audio_ring_buf->log) {
 		return;
 	}
 
-	fclose((FILE *) audio_ctx->log);
-	audio_ctx->log = fopen(debug_audio_bin_log_path(), "r");
+	fclose((FILE *) audio_ring_buf->log);
+	audio_ring_buf->log = fopen(debug_audio_bin_log_path(), "r");
 
-	if (!audio_ctx->log) {
+	if (!audio_ring_buf->log) {
 		debug(0, "can not re-open %s?\n", debug_audio_bin_log_path());
 		return;
 	}
@@ -678,13 +681,13 @@ internal void close_audio_debug_logging(struct audio_context *audio_ctx)
 		return;
 	}
 	sample_num = 0;
-	while ((items_read = fread(&buf, 4, 4096, audio_ctx->log))) {
+	while ((items_read = fread(&buf, 4, 4096, audio_ring_buf->log))) {
 		for (i = 0; i < items_read; i++) {
 			fprintf(audio_log, "%u, %d\n", ++sample_num, buf[i]);
 		}
 	}
-	if (audio_ctx->log) {
-		fclose((FILE *) audio_ctx->log);
+	if (audio_ring_buf->log) {
+		fclose((FILE *) audio_ring_buf->log);
 	}
 	if (audio_log) {
 		fclose(audio_log);
@@ -721,7 +724,7 @@ int main(int argc, char *argv[])
 	struct pixel_buffer blit_buf;
 	struct sdl_texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
-	struct audio_context audio_ctx;
+	struct audio_ring_buffer audio_ring_buf;
 
 	pixel_buffer_init(&blit_buf);
 	pixel_buffer_init(&virtual_win);
@@ -740,11 +743,8 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	ctx.virtual_win = &virtual_win;
-	ctx.x_offset = 0;
-	ctx.y_offset = 0;
-	ctx.x_shift = 0;
-	ctx.y_shift = 0;
+	init_game_context(&ctx, &virtual_win, HANDMAIDEN_AUDIO_START_VOLUME);
+
 	update_pixel_buffer(&ctx);
 
 	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
@@ -764,8 +764,8 @@ int main(int argc, char *argv[])
 
 	sdl_resize_texture_buf(window, renderer, &texture_buf);
 
-	if (init_audio_context(&audio_ctx)) {
-		sdl_audio_dev = sdl_init_audio(&audio_ctx);
+	if (init_audio_ring_buffer(&audio_ring_buf)) {
+		sdl_audio_dev = sdl_init_audio(&audio_ring_buf);
 	} else {
 		sdl_audio_dev = 0;
 	}
@@ -789,17 +789,17 @@ int main(int argc, char *argv[])
 	shutdown = 0;
 	while (!shutdown) {
 		while (SDL_PollEvent(&event)) {
-			shutdown = process_event(&event_ctx, &audio_ctx, &ctx);
+			shutdown = process_event(&event_ctx, &ctx);
 		}
 		ctx.x_offset += ctx.x_shift;
 		ctx.y_offset += ctx.y_shift;
 		update_pixel_buffer(&ctx);
 		stretch_buffer(&virtual_win, &blit_buf);
 		sdl_blit_texture(renderer, &texture_buf);
-		if ((audio_ctx.write_cursor - audio_ctx.play_cursor) <
-		    audio_ctx.sound_buffer_bytes) {
+		if ((audio_ring_buf.write_cursor - audio_ring_buf.play_cursor) <
+		    audio_ring_buf.buf_len) {
 			SDL_LockAudio();
-			if (fill_sound_buffer(&audio_ctx, &ctx) < 0) {
+			if (fill_ring_buf(&audio_ring_buf, &ctx) < 0) {
 				shutdown = 1;
 			}
 			SDL_UnlockAudio();
@@ -825,8 +825,8 @@ int main(int argc, char *argv[])
 				      fps,
 				      (double)frame_count /
 				      (double)total_elapsed_seconds,
-				      audio_ctx.play_cursor,
-				      audio_ctx.write_cursor,
+				      audio_ring_buf.play_cursor,
+				      audio_ring_buf.write_cursor,
 				      ERIC_DEBUG ? "\n" : "\r");
 			}
 		}
@@ -836,7 +836,7 @@ int main(int argc, char *argv[])
 	if (sdl_audio_dev) {
 		SDL_CloseAudioDevice(sdl_audio_dev);
 	}
-	close_audio_debug_logging(&audio_ctx);
+	close_audio_debug_logging(&audio_ring_buf);
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {
@@ -853,9 +853,8 @@ int main(int argc, char *argv[])
 		if (blit_buf.pixels) {
 			munmap(blit_buf.pixels, blit_buf.pixels_bytes_len);
 		}
-		if (audio_ctx.sound_buffer) {
-			munmap(audio_ctx.sound_buffer,
-			       audio_ctx.sound_buffer_bytes);
+		if (audio_ring_buf.buf) {
+			munmap(audio_ring_buf.buf, audio_ring_buf.buf_len);
 		}
 	}
 
