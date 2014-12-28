@@ -1,3 +1,9 @@
+2014-12-28
+
+There are two issues with the SDL sound code. First, volume does not
+seem to be hooked up to anything other than 0 or TOO-LOUD. Second,
+and more interestingly, there seems to be a glitch when changing pitch,
+so more debugging is required.
 
 2014-12-26
 
