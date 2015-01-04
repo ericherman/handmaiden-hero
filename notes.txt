@@ -1,5 +1,12 @@
 2015-01-04
 
+commit a7ad7190e2 similar to
+Handmade Hero Day 013 - Platform-independent User Input
+https://www.youtube.com/watch?v=Lt9DfMzZ9sI
+
+however, I focused on keyboard rather than joystick because I do not
+have a gampad.
+
 commit 59617f6acf approx linux+SDL parity with
 Handmade Hero Day 012 - Platform-independent Sound Output
 https://www.youtube.com/watch?v=5YhR2zAkQmo
