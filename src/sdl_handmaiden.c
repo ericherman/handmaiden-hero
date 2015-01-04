@@ -211,46 +211,58 @@ internal void sdl_blit_texture(SDL_Renderer *renderer,
 }
 
 internal void process_key_event(struct sdl_event_context *event_ctx,
-				struct game_context *ctx)
+				struct human_input *input)
 {
-	int was_down = ((event_ctx->event->key.repeat != 0)
-			|| (event_ctx->event->key.state == SDL_RELEASED));
+	int is_down, was_down;
+
+	is_down = event_ctx->event->key.state == SDL_PRESSED;
+	was_down = ((event_ctx->event->key.repeat != 0)
+		    || (event_ctx->event->key.state == SDL_RELEASED));
 
 	switch (event_ctx->event->key.keysym.scancode) {
 	case SDL_SCANCODE_ESCAPE:
-		event_ctx->event->type = SDL_QUIT;
-		SDL_PushEvent(event_ctx->event);
-		if (was_down) {
-			debug(0, "got escape again again?");
-		}
-		break;
-
-	case SDL_SCANCODE_UP:
-	case SDL_SCANCODE_W:
-		ctx->y_shift++;
-		break;
-	case SDL_SCANCODE_LEFT:
-	case SDL_SCANCODE_A:
-		ctx->x_shift++;
-		break;
-	case SDL_SCANCODE_DOWN:
-	case SDL_SCANCODE_S:
-		ctx->y_shift--;
-		break;
-	case SDL_SCANCODE_RIGHT:
-	case SDL_SCANCODE_D:
-		ctx->x_shift--;
+		input->esc.is_down = is_down;
+		input->esc.was_down = was_down;
 		break;
 	case SDL_SCANCODE_SPACE:
-		ctx->x_shift = 0;
-		ctx->y_shift = 0;
+		input->space.is_down = is_down;
+		input->space.was_down = was_down;
+		break;
+	case SDL_SCANCODE_UP:
+		input->up.is_down = is_down;
+		input->up.was_down = was_down;
+		break;
+	case SDL_SCANCODE_LEFT:
+		input->left.is_down = is_down;
+		input->left.was_down = was_down;
+		break;
+	case SDL_SCANCODE_DOWN:
+		input->down.is_down = is_down;
+		input->down.was_down = was_down;
+		break;
+	case SDL_SCANCODE_RIGHT:
+		input->right.is_down = is_down;
+		input->right.was_down = was_down;
+		break;
+	case SDL_SCANCODE_A:
+		input->a.is_down = is_down;
+		input->a.was_down = was_down;
+		break;
+	case SDL_SCANCODE_D:
+		input->d.is_down = is_down;
+		input->d.was_down = was_down;
 		break;
 	case SDL_SCANCODE_M:
-		if (!was_down) {
-			ctx->sound_volume =
-			    (ctx->sound_volume) ? 0 :
-			    HANDMAIDEN_AUDIO_START_VOLUME;
-		}
+		input->m.is_down = is_down;
+		input->m.was_down = was_down;
+		break;
+	case SDL_SCANCODE_S:
+		input->s.is_down = is_down;
+		input->s.was_down = was_down;
+		break;
+	case SDL_SCANCODE_W:
+		input->w.is_down = is_down;
+		input->w.was_down = was_down;
 		break;
 	default:
 		break;
@@ -258,7 +270,7 @@ internal void process_key_event(struct sdl_event_context *event_ctx,
 }
 
 internal int process_event(struct sdl_event_context *event_ctx,
-			   struct game_context *ctx)
+			   struct human_input *input)
 {
 	switch (event_ctx->event->type) {
 	case SDL_QUIT:
@@ -266,7 +278,7 @@ internal int process_event(struct sdl_event_context *event_ctx,
 		break;
 	case SDL_KEYUP:
 	case SDL_KEYDOWN:
-		process_key_event(event_ctx, ctx);
+		process_key_event(event_ctx, input);
 		break;
 	case SDL_WINDOWEVENT:
 		if (event_ctx->event->window.windowID != event_ctx->win_id) {
@@ -728,6 +740,7 @@ int main(int argc, char *argv[])
 	struct game_context ctx;
 	struct pixel_buffer virtual_win;
 	struct pixel_buffer blit_buf;
+	struct human_input input;
 	struct sdl_texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
 	struct audio_ring_buffer audio_ring_buf;
@@ -809,11 +822,15 @@ int main(int argc, char *argv[])
 	frame_count = 0;
 	shutdown = 0;
 	while (!shutdown) {
+		init_input(&input);
 		while (SDL_PollEvent(&event)) {
-			shutdown = process_event(&event_ctx, &ctx);
+			if ((shutdown = process_event(&event_ctx, &input))) {
+				break;
+			}
 		}
-		ctx.x_offset += ctx.x_shift;
-		ctx.y_offset += ctx.y_shift;
+		if (shutdown || (shutdown = process_input(&ctx, &input))) {
+			break;
+		}
 		update_pixel_buffer(&ctx);
 		stretch_buffer(&virtual_win, &blit_buf);
 		sdl_blit_texture(renderer, &texture_buf);

@@ -18,6 +18,29 @@ struct audio_buffer {
 	unsigned int buf_len;
 };
 
+struct keyboard_key {
+	unsigned int is_down:1;
+	unsigned int was_down:1;
+};
+
+struct human_input {
+	struct keyboard_key up;
+	struct keyboard_key w;
+
+	struct keyboard_key left;
+	struct keyboard_key a;
+
+	struct keyboard_key down;
+	struct keyboard_key s;
+
+	struct keyboard_key right;
+	struct keyboard_key d;
+
+	struct keyboard_key m;
+	struct keyboard_key space;
+	struct keyboard_key esc;
+};
+
 struct game_context {
 	struct pixel_buffer *virtual_win;
 
@@ -32,6 +55,10 @@ struct game_context {
 
 void init_game_context(struct game_context *ctx,
 		       struct pixel_buffer *virtual_win, unsigned int volume);
+
+void init_input(struct human_input *input);
+
+int process_input(struct game_context *ctx, struct human_input *input);
 
 void update_pixel_buffer(struct game_context *ctx);
 

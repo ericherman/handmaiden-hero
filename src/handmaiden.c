@@ -61,3 +61,177 @@ void update_audio_buf(struct game_context *ctx, struct audio_buffer *audio_buf)
 		*right_sample = sine * ctx->sound_volume;
 	}
 }
+
+void init_input(struct human_input *input)
+{
+	input->up.is_down = 0;
+	input->up.was_down = 0;
+
+	input->w.is_down = 0;
+	input->w.was_down = 0;
+
+	input->left.is_down = 0;
+	input->left.was_down = 0;
+
+	input->a.is_down = 0;
+	input->a.was_down = 0;
+
+	input->down.is_down = 0;
+	input->down.was_down = 0;
+
+	input->s.is_down = 0;
+	input->s.was_down = 0;
+
+	input->right.is_down = 0;
+	input->right.was_down = 0;
+
+	input->d.is_down = 0;
+	input->d.was_down = 0;
+
+	input->m.is_down = 0;
+	input->m.was_down = 0;
+
+	input->space.is_down = 0;
+	input->space.was_down = 0;
+
+	input->esc.is_down = 0;
+	input->esc.was_down = 0;
+}
+
+unsigned int input_as_string(struct human_input *input, char *buf,
+			     unsigned int len)
+{
+	unsigned int i;
+
+	i = 0;
+	if (i < len) {
+		buf[i++] = '[';
+	}
+
+	if (i < len) {
+		buf[i++] = input->up.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->up.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->w.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->w.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->left.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->left.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->a.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->a.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->down.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->down.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->s.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->s.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->right.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->right.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->d.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->d.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->m.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->m.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->space.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->space.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = input->esc.is_down ? '1' : '0';
+	}
+	if (i < len) {
+		buf[i++] = input->esc.was_down ? '1' : '0';
+	}
+
+	if (i < len) {
+		buf[i++] = ']';
+	}
+	if (i < len) {
+		buf[i++] = '\0';
+	} else if (i != 0) {
+		buf[i] = '\0';
+	}
+
+	return i;
+}
+
+int process_input(struct game_context *ctx, struct human_input *input)
+{
+	if (input->esc.is_down) {
+		return 1;
+	}
+
+	if (input->space.is_down) {
+		ctx->x_shift = 0;
+		ctx->y_shift = 0;
+	}
+
+	if ((input->w.is_down && !input->w.was_down) ||
+	    (input->up.is_down && !input->up.was_down)) {
+		ctx->y_shift++;
+	}
+	if ((input->s.is_down && !input->s.was_down) ||
+	    (input->down.is_down && !input->down.was_down)) {
+		ctx->y_shift--;
+	}
+
+	if ((input->a.is_down && !input->a.was_down) ||
+	    (input->left.is_down && !input->left.was_down)) {
+		ctx->x_shift++;
+	}
+	if ((input->d.is_down && !input->d.was_down) ||
+	    (input->right.is_down && !input->right.was_down)) {
+		ctx->x_shift--;
+	}
+
+	if ((input->m.is_down && !input->m.was_down)) {
+		ctx->sound_volume = (ctx->sound_volume) ? 0 : 10;
+	}
+
+	ctx->x_offset += ctx->x_shift;
+	ctx->y_offset += ctx->y_shift;
+
+	return 0;
+}
