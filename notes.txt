@@ -1,3 +1,9 @@
+2015-01-04
+
+commit 59617f6acf approx linux+SDL parity with
+Handmade Hero Day 012 - Platform-independent Sound Output
+https://www.youtube.com/watch?v=5YhR2zAkQmo
+
 2014-12-28
 
 There are two issues with the SDL sound code. First, volume does not
