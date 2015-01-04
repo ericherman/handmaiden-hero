@@ -440,13 +440,18 @@ internal unsigned int init_audio_ring_buffer(struct audio_ring_buffer
 }
 
 internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
-			    struct game_context *ctx)
+			    struct game_context *ctx,
+			    struct sample_buffer *sample_buf)
 {
 	unsigned int bytes_per_sample_all_chans,
 	    bytes_to_write, region_1_bytes, region_2_bytes, sample_count, i,
 	    buf_pos, starting_buf_pos, left_sample_value, right_sample_value;
 	unsigned long sample_pos;
-	struct sample_buffer sample_buf;
+
+	if (!sample_buf->samples) {
+		debug(0, "no sample_buf->samples\n");
+		return -1;
+	}
 
 	bytes_per_sample_all_chans =
 	    HANDMAIDEN_AUDIO_BYTES_PER_SAMPLE * HANDMAIDEN_AUDIO_CHANNELS;
@@ -469,17 +474,19 @@ internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
 		    (audio_ring_buf->write_cursor % audio_ring_buf->buf_len);
 	}
 
-	sample_buf.stream_pos =
-	    (audio_ring_buf->write_cursor / bytes_per_sample_all_chans);
-	sample_buf.num_samples = bytes_to_write / bytes_per_sample_all_chans;
-	sample_buf.samples = (int *)platform_alloc(bytes_to_write);
-
-	if (!sample_buf.samples) {
-		debug(0, "could not allocate sample_buf.samples[%u]\n",
-		      sample_buf.num_samples);
-		return -1;
+	if (bytes_to_write > sample_buf->buf_len) {
+		debug(0, "bytes_to_write > sample_buf->buf_len (%u > %u)\n",
+		      bytes_to_write, sample_buf->buf_len);
+		bytes_to_write = sample_buf->buf_len;
 	}
-	update_sample_buf(ctx, &sample_buf);
+
+	debug(2, "bytes_to_write: %u\n", bytes_to_write);
+
+	sample_buf->stream_pos =
+	    (audio_ring_buf->write_cursor / bytes_per_sample_all_chans);
+	sample_buf->num_samples = bytes_to_write / bytes_per_sample_all_chans;
+
+	update_sample_buf(ctx, sample_buf);
 
 	if ((audio_ring_buf->play_cursor % audio_ring_buf->buf_len) >=
 	    (audio_ring_buf->write_cursor % audio_ring_buf->buf_len)) {
@@ -528,8 +535,8 @@ internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
 	sample_count = region_1_bytes / bytes_per_sample_all_chans;
 	for (i = 0; i < sample_count; i++) {
 		sample_pos = (i * 2);
-		left_sample_value = *(sample_buf.samples + sample_pos);
-		right_sample_value = *(sample_buf.samples + sample_pos + 1);
+		left_sample_value = *(sample_buf->samples + sample_pos);
+		right_sample_value = *(sample_buf->samples + sample_pos + 1);
 
 		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
 		    left_sample_value;
@@ -550,8 +557,8 @@ internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
 	starting_buf_pos = buf_pos;
 	for (i = 0; i < sample_count; i++) {
 		sample_pos = (i * 2);
-		left_sample_value = *(sample_buf.samples + sample_pos);
-		right_sample_value = *(sample_buf.samples + sample_pos + 1);
+		left_sample_value = *(sample_buf->samples + sample_pos);
+		right_sample_value = *(sample_buf->samples + sample_pos + 1);
 
 		*(int *)(((unsigned char *)audio_ring_buf->buf) + buf_pos) =
 		    left_sample_value;
@@ -584,7 +591,6 @@ internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
 		return -1;
 	}
 	debug(1, "fill: done.\n");
-	platform_free(sample_buf.samples, bytes_to_write);
 	return (long)(region_1_bytes + region_2_bytes);
 }
 
@@ -725,6 +731,7 @@ int main(int argc, char *argv[])
 	struct sdl_texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
 	struct audio_ring_buffer audio_ring_buf;
+	struct sample_buffer sample_buf;
 
 	pixel_buffer_init(&blit_buf);
 	pixel_buffer_init(&virtual_win);
@@ -769,8 +776,22 @@ int main(int argc, char *argv[])
 	} else {
 		sdl_audio_dev = 0;
 	}
+	if (sdl_audio_dev && audio_ring_buf.buf_len) {
+		sample_buf.stream_pos = 0;
+		sample_buf.num_samples = 0;
+		sample_buf.samples =
+		    (int *)platform_alloc(audio_ring_buf.buf_len);
+		if (!sample_buf.samples) {
+			debug(0, "could not allocate sample_buf.samples[%u]\n",
+			      audio_ring_buf.buf_len);
+			sample_buf.buf_len = 0;
+		} else {
+			sample_buf.buf_len = audio_ring_buf.buf_len;
+		}
+	}
+
 	/* start audio playing by setting "pause" to zero */
-	if (sdl_audio_dev) {
+	if (sdl_audio_dev && sample_buf.samples) {
 		SDL_PauseAudioDevice(sdl_audio_dev, 0);
 	}
 
@@ -796,13 +817,17 @@ int main(int argc, char *argv[])
 		update_pixel_buffer(&ctx);
 		stretch_buffer(&virtual_win, &blit_buf);
 		sdl_blit_texture(renderer, &texture_buf);
-		if ((audio_ring_buf.write_cursor - audio_ring_buf.play_cursor) <
-		    audio_ring_buf.buf_len) {
-			SDL_LockAudio();
-			if (fill_ring_buf(&audio_ring_buf, &ctx) < 0) {
-				shutdown = 1;
+		if (sdl_audio_dev && sample_buf.samples) {
+			if ((audio_ring_buf.write_cursor -
+			     audio_ring_buf.play_cursor) <
+			    audio_ring_buf.buf_len) {
+				SDL_LockAudio();
+				if (fill_ring_buf
+				    (&audio_ring_buf, &ctx, &sample_buf) < 0) {
+					shutdown = 1;
+				}
+				SDL_UnlockAudio();
 			}
-			SDL_UnlockAudio();
 		}
 		frame_count++;
 		frames_since_print++;
@@ -849,12 +874,17 @@ int main(int argc, char *argv[])
 		SDL_Quit();
 
 		/* then collect our own garbage */
-		munmap(virtual_win.pixels, virtual_win.pixels_bytes_len);
+		platform_free(virtual_win.pixels, virtual_win.pixels_bytes_len);
 		if (blit_buf.pixels) {
-			munmap(blit_buf.pixels, blit_buf.pixels_bytes_len);
+			platform_free(blit_buf.pixels,
+				      blit_buf.pixels_bytes_len);
 		}
 		if (audio_ring_buf.buf) {
-			munmap(audio_ring_buf.buf, audio_ring_buf.buf_len);
+			platform_free(audio_ring_buf.buf,
+				      audio_ring_buf.buf_len);
+		}
+		if (sample_buf.samples) {
+			platform_free(sample_buf.samples, sample_buf.buf_len);
 		}
 	}
 

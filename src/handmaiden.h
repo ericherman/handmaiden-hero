@@ -15,6 +15,7 @@ struct sample_buffer {
 	unsigned long stream_pos;
 	unsigned int num_samples;
 	int *samples;
+	unsigned int buf_len;
 };
 
 struct game_context {
