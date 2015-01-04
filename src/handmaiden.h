@@ -11,7 +11,7 @@ struct pixel_buffer {
 	unsigned int *pixels;
 };
 
-struct sample_buffer {
+struct audio_buffer {
 	unsigned long stream_pos;
 	unsigned int num_samples;
 	int *samples;
@@ -35,7 +35,6 @@ void init_game_context(struct game_context *ctx,
 
 void update_pixel_buffer(struct game_context *ctx);
 
-void update_sample_buf(struct game_context *ctx,
-		       struct sample_buffer *sample_buf);
+void update_audio_buf(struct game_context *ctx, struct audio_buffer *audio_buf);
 
 #endif /* _HANDMAIDEN_H_ */

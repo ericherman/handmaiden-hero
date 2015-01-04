@@ -38,8 +38,7 @@ void update_pixel_buffer(struct game_context *ctx)
 	}
 }
 
-void update_sample_buf(struct game_context *ctx,
-		       struct sample_buffer *sample_buf)
+void update_audio_buf(struct game_context *ctx, struct audio_buffer *audio_buf)
 {
 	unsigned int i, tone_hz;
 	int *left_sample, *right_sample;
@@ -53,11 +52,11 @@ void update_sample_buf(struct game_context *ctx,
 	tone_hz += 8 * ((ctx->x_shift < 0) ? -(ctx->x_shift) : ctx->x_shift);
 	tone_hz += 8 * ((ctx->y_shift < 0) ? -(ctx->y_shift) : ctx->y_shift);
 
-	for (i = 0; i < sample_buf->num_samples; i++) {
-		left_sample = sample_buf->samples + (i * 2);
+	for (i = 0; i < audio_buf->num_samples; i++) {
+		left_sample = audio_buf->samples + (i * 2);
 		right_sample = left_sample + 1;
 
-		sine = sin((sample_buf->stream_pos + i) * 2 * M_PI / tone_hz);
+		sine = sin((audio_buf->stream_pos + i) * 2 * M_PI / tone_hz);
 		*left_sample = sine * ctx->sound_volume;
 		*right_sample = sine * ctx->sound_volume;
 	}
