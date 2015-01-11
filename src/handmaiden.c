@@ -24,6 +24,11 @@ void init_game(struct game_memory *mem, unsigned int volume)
 
 	ctx = (struct game_context *)mem->fixed_memory;
 
+	HANDMAIDEN_ASSERT(mem->fixed_memory_size >=
+			  (sizeof(struct game_context) +
+			   sizeof(struct pixel_buffer) +
+			   (800 * 600 * sizeof(unsigned int))));
+
 	ctx->x_offset = 0;
 	ctx->y_offset = 0;
 	ctx->x_shift = 0;
@@ -36,7 +41,7 @@ void init_game(struct game_memory *mem, unsigned int volume)
 				    sizeof(struct game_context));
 	ctx->virtual_win->width = 800;
 	ctx->virtual_win->height = 600;
-	ctx->virtual_win->bytes_per_pixel = 32;
+	ctx->virtual_win->bytes_per_pixel = sizeof(unsigned int);
 	ctx->virtual_win->pitch =
 	    (ctx->virtual_win->width * ctx->virtual_win->bytes_per_pixel);
 	ctx->virtual_win->pixels_bytes_len =

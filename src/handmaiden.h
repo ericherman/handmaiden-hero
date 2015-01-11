@@ -1,6 +1,9 @@
 #ifndef _HANDMAIDEN_H_
 #define _HANDMAIDEN_H_
 
+/* writing to address NULL will allways segfault */
+#define HANDMAIDEN_ASSERT(condition) if(!(condition)) *((char *)0) = 0;
+
 struct pixel_buffer {
 	unsigned int width;
 	unsigned int height;
