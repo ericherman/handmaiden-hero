@@ -57,8 +57,6 @@ struct game_memory {
 /* services teh game provides to the platform layer */
 void init_game(struct game_memory *mem, unsigned int initial_volume);
 
-void init_input(struct human_input *input);
-
 int process_input(struct game_memory *mem, struct human_input *input);
 
 void update_pixel_buffer(struct game_memory *mem,

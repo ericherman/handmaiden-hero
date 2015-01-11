@@ -823,6 +823,42 @@ internal void diff_timespecs(struct timespec start, struct timespec end,
 	}
 }
 
+void init_input(struct human_input *input)
+{
+	input->up.is_down = 0;
+	input->up.was_down = 0;
+
+	input->w.is_down = 0;
+	input->w.was_down = 0;
+
+	input->left.is_down = 0;
+	input->left.was_down = 0;
+
+	input->a.is_down = 0;
+	input->a.was_down = 0;
+
+	input->down.is_down = 0;
+	input->down.was_down = 0;
+
+	input->s.is_down = 0;
+	input->s.was_down = 0;
+
+	input->right.is_down = 0;
+	input->right.was_down = 0;
+
+	input->d.is_down = 0;
+	input->d.was_down = 0;
+
+	input->m.is_down = 0;
+	input->m.was_down = 0;
+
+	input->space.is_down = 0;
+	input->space.was_down = 0;
+
+	input->esc.is_down = 0;
+	input->esc.was_down = 0;
+}
+
 int main(int argc, char *argv[])
 {
 	char *title;
