@@ -1,3 +1,9 @@
+2015-01-11
+
+commit 5a95c485ae similar to
+Handmade Hero Day 014 - Platform-independent Game Memory
+https://www.youtube.com/watch?v=tcENxzeTjbI
+
 2015-01-04
 
 commit a7ad7190e2 similar to
