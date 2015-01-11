@@ -54,6 +54,7 @@ struct game_memory {
 	unsigned int is_initialized:1;
 };
 
+/* services teh game provides to the platform layer */
 void init_game(struct game_memory *mem, unsigned int initial_volume);
 
 void init_input(struct human_input *input);
@@ -64,5 +65,11 @@ void update_pixel_buffer(struct game_memory *mem,
 			 struct pixel_buffer **virtual_win);
 
 void update_audio_buf(struct game_memory *mem, struct audio_buffer *audio_buf);
+
+/* services the platform layer provides to the game */
+void *DEBUG_platfrom_read_entire_file(char *filename, unsigned int *size);
+void DEBUG_platform_free_file_memory(void *mem, unsigned int size);
+int DEBUG_platform_write_entire_file(char *filename, unsigned int size,
+				     void *mem);
 
 #endif /* _HANDMAIDEN_H_ */

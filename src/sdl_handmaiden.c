@@ -28,6 +28,10 @@
 
 #include <sys/mman.h>
 /* end mmap includes */
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+/* end open/close includes */
 
 /* the Simple Directmedia Library requires the following includes */
 #include <SDL.h>
@@ -42,6 +46,101 @@
 
 /* watch out for side-effects of X or Y */
 #define min(X, Y)  ((X) < (Y) ? (X) : (Y))
+
+internal int debug(int debug_level, const char *fmt, ...);
+
+/* services the platform layer provides to the game */
+void *DEBUG_platfrom_read_entire_file(char *filename, unsigned int *size)
+{
+	int fd;
+	struct stat fst;
+	void *mem;
+
+	fd = open(filename, O_RDONLY);
+	if (fd == -1) {
+		debug(0, "open(\"%s\", O_RDONLY) == -1\n", filename);
+		return 0;
+	}
+
+	if (fstat(fd, &fst) == -1) {
+		debug(0, "fstat(fd, &fst) == -1\n");
+		return 0;
+	}
+
+	if (!fst.st_size) {
+		debug(0, "%s size is 0\n", filename);
+		mem = 0;
+	} else {
+		*size = (unsigned int)fst.st_size;
+		mem =
+		    mmap(0, fst.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE,
+			 fd, 0);
+	}
+
+	if (fd != -1) {
+		close(fd);
+	}
+
+	if (!mem) {
+		debug(0, "mem is NULL\n");
+	} else if (mem == MAP_FAILED) {
+		debug(0, "mem == MAP_FAILED\n");
+	} else {
+		debug(2, "%s", (char *)mem);
+	}
+
+	return mem;
+}
+
+void DEBUG_platform_free_file_memory(void *mem, unsigned int size)
+{
+	if (!mem) {
+		return;
+	}
+
+	munmap(mem, size);
+}
+
+int DEBUG_platform_write_entire_file(char *filename, unsigned int size,
+				     void *mem)
+{
+	int fd;
+	void *out;
+
+	fd = open(filename, O_RDWR | O_CREAT | O_TRUNC,
+		  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+	if (fd == -1) {
+		debug(0, "open %s failed\n", filename);
+		return 1;
+	}
+
+	if (!size) {
+		debug(1, "nothing to do\n");
+	} else if (lseek(fd, size - 1, SEEK_SET) == -1) {
+		debug(0, "lseek 1\n");
+	} else if (write(fd, "", 1) != 1) {
+		debug(0, "write byte\n");
+	} else if (lseek(fd, 0, SEEK_SET) == -1) {
+		debug(0, "lseek 2\n");
+	}
+
+	out = mmap(0, size, PROT_WRITE, MAP_FILE | MAP_SHARED, fd, 0);
+
+	if (!out) {
+		debug(0, "out is NULL\n");
+	} else if (out == MAP_FAILED) {
+		debug(0, "out == MAP_FAILED\n");
+	} else if (mem) {
+		memcpy(out, mem, size);
+	} else {
+		debug(0, "no mem to copy.\n");
+	}
+	if (fd != -1) {
+		close(fd);
+	}
+	return 0;
+}
 
 internal void *platform_alloc(unsigned int len)
 {
