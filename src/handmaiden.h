@@ -41,27 +41,25 @@ struct human_input {
 	struct keyboard_key esc;
 };
 
-struct game_context {
-	struct pixel_buffer *virtual_win;
+struct game_memory {
+	unsigned int fixed_memory_size;
+	unsigned char *fixed_memory;
 
-	unsigned char x_offset;
-	unsigned char y_offset;
-	int x_shift;
-	int y_shift;
+	unsigned int transient_memory_size;
+	unsigned char *transient_memory;
 
-	unsigned int sound_volume;
-	unsigned int tone_hz;
+	unsigned int is_initialized:1;
 };
 
-void init_game_context(struct game_context *ctx,
-		       struct pixel_buffer *virtual_win, unsigned int volume);
+void init_game(struct game_memory *mem, unsigned int initial_volume);
 
 void init_input(struct human_input *input);
 
-int process_input(struct game_context *ctx, struct human_input *input);
+int process_input(struct game_memory *mem, struct human_input *input);
 
-void update_pixel_buffer(struct game_context *ctx);
+void update_pixel_buffer(struct game_memory *mem,
+			 struct pixel_buffer **virtual_win);
 
-void update_audio_buf(struct game_context *ctx, struct audio_buffer *audio_buf);
+void update_audio_buf(struct game_memory *mem, struct audio_buffer *audio_buf);
 
 #endif /* _HANDMAIDEN_H_ */

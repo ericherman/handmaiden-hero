@@ -6,43 +6,81 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-void init_game_context(struct game_context *ctx,
-		       struct pixel_buffer *virtual_win, unsigned int volume)
+struct game_context {
+	struct pixel_buffer *virtual_win;
+
+	unsigned char x_offset;
+	unsigned char y_offset;
+	int x_shift;
+	int y_shift;
+
+	unsigned int sound_volume;
+	unsigned int tone_hz;
+};
+
+void init_game(struct game_memory *mem, unsigned int volume)
 {
-	ctx->virtual_win = virtual_win;
+	struct game_context *ctx;
+
+	ctx = (struct game_context *)mem->fixed_memory;
+
 	ctx->x_offset = 0;
 	ctx->y_offset = 0;
 	ctx->x_shift = 0;
 	ctx->y_shift = 0;
 	ctx->sound_volume = volume;
 	ctx->tone_hz = 0;
+
+	ctx->virtual_win =
+	    (struct pixel_buffer *)(mem->fixed_memory +
+				    sizeof(struct game_context));
+	ctx->virtual_win->width = 800;
+	ctx->virtual_win->height = 600;
+	ctx->virtual_win->bytes_per_pixel = 32;
+	ctx->virtual_win->pitch =
+	    (ctx->virtual_win->width * ctx->virtual_win->bytes_per_pixel);
+	ctx->virtual_win->pixels_bytes_len =
+	    (ctx->virtual_win->width * ctx->virtual_win->height *
+	     ctx->virtual_win->bytes_per_pixel);
+	ctx->virtual_win->pixels =
+	    (unsigned int *)(mem->fixed_memory + sizeof(struct game_context) +
+			     sizeof(struct pixel_buffer));
 }
 
-void update_pixel_buffer(struct game_context *ctx)
+void update_pixel_buffer(struct game_memory *mem,
+			 struct pixel_buffer **virtual_win)
 {
-	struct pixel_buffer *virtual_win = ctx->virtual_win;
+	struct game_context *ctx;
+	struct pixel_buffer *pixel_buf;
 	unsigned int x, y;
 	unsigned char red, blue;
 	unsigned int foreground;
 
-	for (y = 0; y < virtual_win->height; y++) {
-		for (x = 0; x < virtual_win->width; x++) {
+	ctx = (struct game_context *)mem->fixed_memory;
+
+	pixel_buf = ctx->virtual_win;
+	for (y = 0; y < pixel_buf->height; y++) {
+		for (x = 0; x < pixel_buf->width; x++) {
 			/* unsigned char means % 256 */
 			red = x + ctx->x_offset;
 			blue = y + ctx->y_offset;
 			foreground =
 			    (((unsigned int)blue) << 16) + (unsigned int)red;
-			*(virtual_win->pixels + (y * virtual_win->width) + x) =
+			*(pixel_buf->pixels + (y * pixel_buf->width) + x) =
 			    foreground;
 		}
 	}
+	*virtual_win = pixel_buf;
 }
 
-void update_audio_buf(struct game_context *ctx, struct audio_buffer *audio_buf)
+void update_audio_buf(struct game_memory *mem, struct audio_buffer *audio_buf)
 {
+	struct game_context *ctx;
 	unsigned int i, tone_hz;
 	int *left_sample, *right_sample;
 	double sine;
+
+	ctx = (struct game_context *)mem->fixed_memory;
 
 	if ((ctx->tone_hz < 20) || (ctx->tone_hz >= 10000)) {
 		/* reset tone_hz */
@@ -197,8 +235,13 @@ unsigned int input_as_string(struct human_input *input, char *buf,
 	return i;
 }
 
-int process_input(struct game_context *ctx, struct human_input *input)
+int process_input(struct game_memory *mem, struct human_input *input)
 {
+
+	struct game_context *ctx;
+
+	ctx = (struct game_context *)mem->fixed_memory;
+
 	if (input->esc.is_down) {
 		return 1;
 	}

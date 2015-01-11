@@ -452,7 +452,7 @@ internal unsigned int init_audio_ring_buffer(struct audio_ring_buffer
 }
 
 internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
-			    struct game_context *ctx,
+			    struct game_memory *mem,
 			    struct audio_buffer *audio_buf)
 {
 	unsigned int bytes_per_sample_all_chans,
@@ -498,7 +498,7 @@ internal long fill_ring_buf(struct audio_ring_buffer *audio_ring_buf,
 	    (audio_ring_buf->write_cursor / bytes_per_sample_all_chans);
 	audio_buf->num_samples = bytes_to_write / bytes_per_sample_all_chans;
 
-	update_audio_buf(ctx, audio_buf);
+	update_audio_buf(mem, audio_buf);
 
 	if ((audio_ring_buf->play_cursor % audio_ring_buf->buf_len) >=
 	    (audio_ring_buf->write_cursor % audio_ring_buf->buf_len)) {
@@ -737,8 +737,8 @@ int main(int argc, char *argv[])
 	unsigned long total_elapsed_seconds;
 	double fps;
 	unsigned long int frame_count, frames_since_print;
-	struct game_context ctx;
-	struct pixel_buffer virtual_win;
+	struct game_memory mem;
+	struct pixel_buffer *virtual_win;
 	struct pixel_buffer blit_buf;
 	struct human_input input;
 	struct sdl_texture_buffer texture_buf;
@@ -747,7 +747,6 @@ int main(int argc, char *argv[])
 	struct audio_buffer audio_buf;
 
 	pixel_buffer_init(&blit_buf);
-	pixel_buffer_init(&virtual_win);
 
 	texture_buf.texture = NULL;
 	texture_buf.pixel_buf = &blit_buf;
@@ -758,14 +757,26 @@ int main(int argc, char *argv[])
 
 	height = 480;
 	width = 640;
-	if (!resize_pixel_buffer(&virtual_win, height, width)) {
-		debug(0, "Could not resize pixel_buffer\n");
-		exit(EXIT_FAILURE);
+
+	mem.is_initialized = 0;
+	mem.fixed_memory_size = 4 * 1024 * 1024;
+	mem.transient_memory_size = 1 * 1024 * 1024;
+	mem.fixed_memory =
+	    platform_alloc(mem.fixed_memory_size + mem.transient_memory_size);
+	if (mem.fixed_memory == 0) {
+		debug(0, "did not alloc game memory\n");
+		return 1;
 	}
 
-	init_game_context(&ctx, &virtual_win, HANDMAIDEN_AUDIO_START_VOLUME);
+	mem.transient_memory = mem.fixed_memory + mem.fixed_memory_size;
 
-	update_pixel_buffer(&ctx);
+	init_game(&mem, HANDMAIDEN_AUDIO_START_VOLUME);
+
+	virtual_win = NULL;
+	update_pixel_buffer(&mem, &virtual_win);
+	if (!virtual_win) {
+		debug(0, "did not assign virtual_win\n");
+	}
 
 	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
 	x = SDL_WINDOWPOS_UNDEFINED;
@@ -828,11 +839,11 @@ int main(int argc, char *argv[])
 				break;
 			}
 		}
-		if (shutdown || (shutdown = process_input(&ctx, &input))) {
+		if (shutdown || (shutdown = process_input(&mem, &input))) {
 			break;
 		}
-		update_pixel_buffer(&ctx);
-		stretch_buffer(&virtual_win, &blit_buf);
+		update_pixel_buffer(&mem, &virtual_win);
+		stretch_buffer(virtual_win, &blit_buf);
 		sdl_blit_texture(renderer, &texture_buf);
 		if (sdl_audio_dev && audio_buf.samples) {
 			if ((audio_ring_buf.write_cursor -
@@ -840,7 +851,7 @@ int main(int argc, char *argv[])
 			    audio_ring_buf.buf_len) {
 				SDL_LockAudio();
 				if (fill_ring_buf
-				    (&audio_ring_buf, &ctx, &audio_buf) < 0) {
+				    (&audio_ring_buf, &mem, &audio_buf) < 0) {
 					shutdown = 1;
 				}
 				SDL_UnlockAudio();
@@ -891,7 +902,6 @@ int main(int argc, char *argv[])
 		SDL_Quit();
 
 		/* then collect our own garbage */
-		platform_free(virtual_win.pixels, virtual_win.pixels_bytes_len);
 		if (blit_buf.pixels) {
 			platform_free(blit_buf.pixels,
 				      blit_buf.pixels_bytes_len);
@@ -902,6 +912,11 @@ int main(int argc, char *argv[])
 		}
 		if (audio_buf.samples) {
 			platform_free(audio_buf.samples, audio_buf.buf_len);
+		}
+		if (mem.fixed_memory) {
+			platform_free(mem.fixed_memory,
+				      mem.fixed_memory_size +
+				      mem.transient_memory_size);
 		}
 	}
 
