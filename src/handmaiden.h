@@ -66,7 +66,7 @@ void update_pixel_buffer(struct game_memory *mem,
 void update_audio_buf(struct game_memory *mem, struct audio_buffer *audio_buf);
 
 /* services the platform layer provides to the game */
-void *DEBUG_platfrom_read_entire_file(char *filename, unsigned int *size);
+void *DEBUG_platform_read_entire_file(char *filename, unsigned int *size);
 void DEBUG_platform_free_file_memory(void *mem, unsigned int size);
 int DEBUG_platform_write_entire_file(char *filename, unsigned int size,
 				     void *mem);

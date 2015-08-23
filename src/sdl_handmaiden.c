@@ -52,7 +52,7 @@
 internal int debug(int debug_level, const char *fmt, ...);
 
 /* services the platform layer provides to the game */
-void *DEBUG_platfrom_read_entire_file(char *filename, unsigned int *size)
+void *DEBUG_platform_read_entire_file(char *filename, unsigned int *size)
 {
 	int fd;
 	struct stat fst;
