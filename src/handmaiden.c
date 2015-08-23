@@ -23,6 +23,9 @@ void init_game(struct game_memory *mem, unsigned int default_volume,
 	       unsigned int initial_volume)
 {
 	struct game_context *ctx;
+	void *file_contents;
+	unsigned int size;
+	int error;
 
 	ctx = (struct game_context *)mem->fixed_memory;
 
@@ -53,6 +56,18 @@ void init_game(struct game_memory *mem, unsigned int default_volume,
 	ctx->virtual_win->pixels =
 	    (unsigned int *)(mem->fixed_memory + sizeof(struct game_context) +
 			     sizeof(struct pixel_buffer));
+
+	/* this just tests the debug IO code */
+	file_contents = DEBUG_platform_read_entire_file(__FILE__, &size);
+	if (file_contents) {
+		error =
+		    DEBUG_platform_write_entire_file("test.out", size,
+						     file_contents);
+		if (error) {
+			/* TODO log? */
+		}
+		DEBUG_platform_free_file_memory(mem, size);
+	}
 }
 
 void update_pixel_buffer(struct game_memory *mem,
