@@ -79,6 +79,7 @@ void *DEBUG_platform_read_entire_file(char *filename, unsigned int *size)
 			 fd, 0);
 	}
 
+	/* fd can not actually be -1 here, we would have returned above */
 	if (fd != -1) {
 		close(fd);
 	}
@@ -138,9 +139,12 @@ int DEBUG_platform_write_entire_file(char *filename, unsigned int size,
 	} else {
 		debug(0, "no mem to copy.\n");
 	}
+
+	/* fd can not actually be -1 here, we would have returned above */
 	if (fd != -1) {
 		close(fd);
 	}
+
 	return 0;
 }
 
