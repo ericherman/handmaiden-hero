@@ -8,7 +8,9 @@
 #define DEBUG_LOG_AUDIO 0
 
 /* audio config constants */
-#define HANDMAIDEN_AUDIO_START_VOLUME 16
+#define HANDMAIDEN_AUDIO_DEFAULT_VOLUME 8
+/* #define HANDMAIDEN_AUDIO_START_VOLUME HANDMAIDEN_AUDIO_DEFAULT_VOLUME */
+#define HANDMAIDEN_AUDIO_START_VOLUME 0
 #define HANDMAIDEN_AUDIO_BUF_CHUNKS 4
 #define HANDMAIDEN_AUDIO_BUF_SIZE (HANDMAIDEN_AUDIO_BUF_CHUNKS * 65536)
 #define HANDMAIDEN_AUDIO_SAMPLES_PER_SECOND 48000
@@ -905,7 +907,8 @@ int main(int argc, char *argv[])
 
 	mem.transient_memory = mem.fixed_memory + mem.fixed_memory_size;
 
-	init_game(&mem, HANDMAIDEN_AUDIO_START_VOLUME);
+	init_game(&mem, HANDMAIDEN_AUDIO_DEFAULT_VOLUME,
+		  HANDMAIDEN_AUDIO_START_VOLUME);
 
 	virtual_win = NULL;
 	update_pixel_buffer(&mem, &virtual_win);

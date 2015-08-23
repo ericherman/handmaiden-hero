@@ -54,8 +54,9 @@ struct game_memory {
 	unsigned int is_initialized:1;
 };
 
-/* services teh game provides to the platform layer */
-void init_game(struct game_memory *mem, unsigned int initial_volume);
+/* services the game provides to the platform layer */
+void init_game(struct game_memory *mem, unsigned int default_volume,
+	       unsigned int initial_volume);
 
 int process_input(struct game_memory *mem, struct human_input *input);
 

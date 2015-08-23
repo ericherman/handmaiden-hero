@@ -15,10 +15,12 @@ struct game_context {
 	int y_shift;
 
 	unsigned int sound_volume;
+	unsigned int sound_default_volume;
 	unsigned int tone_hz;
 };
 
-void init_game(struct game_memory *mem, unsigned int volume)
+void init_game(struct game_memory *mem, unsigned int default_volume,
+	       unsigned int initial_volume)
 {
 	struct game_context *ctx;
 
@@ -33,7 +35,8 @@ void init_game(struct game_memory *mem, unsigned int volume)
 	ctx->y_offset = 0;
 	ctx->x_shift = 0;
 	ctx->y_shift = 0;
-	ctx->sound_volume = volume;
+	ctx->sound_default_volume = default_volume;
+	ctx->sound_volume = initial_volume;
 	ctx->tone_hz = 0;
 
 	ctx->virtual_win =
@@ -239,7 +242,8 @@ int process_input(struct game_memory *mem, struct human_input *input)
 	}
 
 	if ((input->m.is_down && !input->m.was_down)) {
-		ctx->sound_volume = (ctx->sound_volume) ? 0 : 10;
+		ctx->sound_volume =
+		    (ctx->sound_volume) ? 0 : ctx->sound_default_volume;
 	}
 
 	ctx->x_offset += ctx->x_shift;
