@@ -1,5 +1,5 @@
-#ifndef _HANDMAIDEN_H_
-#define _HANDMAIDEN_H_
+#ifndef HANDMAIDEN_H
+#define HANDMAIDEN_H
 
 /* writing to address NULL will allways segfault */
 #define HANDMAIDEN_ASSERT(condition) if(!(condition)) *((char *)0) = 0;
@@ -71,4 +71,4 @@ void DEBUG_platform_free_file_memory(void *mem, unsigned int size);
 int DEBUG_platform_write_entire_file(char *filename, unsigned int size,
 				     void *mem);
 
-#endif /* _HANDMAIDEN_H_ */
+#endif /* HANDMAIDEN_H */
