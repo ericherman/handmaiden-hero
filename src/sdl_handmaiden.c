@@ -1,11 +1,20 @@
 /* sdl_handmaiden.c */
+#ifndef FPS_PRINTER
 #define FPS_PRINTER 0
+#endif
+
+#ifndef HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY
 #define HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY 0
+#endif
 
 #include "handmaiden.h"
 
+#ifndef ERIC_DEBUG
 #define ERIC_DEBUG 0
+#endif
+#ifndef DEBUG_LOG_AUDIO
 #define DEBUG_LOG_AUDIO 0
+#endif
 
 /* audio config constants */
 #define HANDMAIDEN_AUDIO_DEFAULT_VOLUME 8
@@ -24,9 +33,14 @@
 */
 
 /* memory allocation by mmap requires _GNU_SOURCE since it is linux specific */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
+
 /* clock_gettime in time.h requires _POSIX_C_SOURCE 199309 */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 199309
+#endif
 
 #include <sys/mman.h>
 /* end mmap includes */
