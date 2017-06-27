@@ -1,6 +1,9 @@
 all: clean sdl-handmaiden
 
-CFLAGS=-std=c89 -O3 -march=native -Wall -Wextra -pedantic -Werror -ggdb
+CFLAGS=-std=c89 -Wall -Wextra -pedantic -Werror \
+ -ggdb -O3 -march=native -fomit-frame-pointer \
+ -pipe
+
 LFLAGS=-lm
 
 # extracted from https://github.com/torvalds/linux/blob/master/scripts/Lindent
