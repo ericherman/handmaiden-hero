@@ -28,6 +28,40 @@ struct keyboard_key {
 	unsigned int was_down:1;
 };
 
+struct game_button_state {
+	int half_transition_count;
+	unsigned int ended_down;
+};
+
+struct game_controller_input {
+	unsigned int is_analog;
+
+	float start_x;
+	float start_y;
+
+	float min_x;
+	float min_y;
+
+	float max_x;
+	float max_y;
+
+	float end_x;
+	float end_y;
+
+	union {
+		struct game_button_state buttons[6];
+		struct six_buttons {
+			struct game_button_state up;
+			struct game_button_state down;
+			struct game_button_state left;
+			struct game_button_state right;
+			struct game_button_state l_shoulder;
+			struct game_button_state r_shoulder;
+		} six_buttons;
+	} but_u;
+};
+
+#define MAX_CONTROLLERS 1
 struct human_input {
 	struct keyboard_key up;
 	struct keyboard_key w;
@@ -44,6 +78,8 @@ struct human_input {
 	struct keyboard_key m;
 	struct keyboard_key space;
 	struct keyboard_key esc;
+
+	struct game_controller_input controllers[MAX_CONTROLLERS];
 };
 
 struct game_memory {

@@ -188,12 +188,18 @@ struct sdl_texture_buffer {
 	struct pixel_buffer *pixel_buf;
 };
 
+struct sdl_joystick {
+	SDL_GameController *controller;
+	SDL_Haptic *rumble;
+};
+
 struct sdl_event_context {
 	struct sdl_texture_buffer *texture_buf;
 	SDL_Window *window;
 	Uint32 win_id;
 	SDL_Renderer *renderer;
 	SDL_Event *event;
+	struct sdl_joystick players[MAX_CONTROLLERS];
 };
 
 struct audio_ring_buffer {
@@ -877,6 +883,166 @@ void init_input(struct human_input *input)
 
 	input->esc.is_down = 0;
 	input->esc.was_down = 0;
+
+	/* TODO: init controller input */
+}
+
+internal void sdl_init_joysticks(struct sdl_event_context *ctx)
+{
+	unsigned int player;
+	int num_joy_sticks, jsi;
+	SDL_GameController *controller;
+	SDL_Joystick *joystick;
+	SDL_Haptic *rumble;
+
+	for (player = 0; player < MAX_CONTROLLERS; ++player) {
+		ctx->players[player].controller = NULL;
+		ctx->players[player].rumble = NULL;
+	}
+
+	num_joy_sticks = SDL_NumJoysticks();
+	debug(0, "SDL_NumJoysticks() == %d\n", num_joy_sticks);
+	player = 0;
+	for (jsi = 0; jsi < num_joy_sticks && player < MAX_CONTROLLERS; ++jsi) {
+		if (!SDL_IsGameController(jsi)) {
+			debug(0, "SDL_IsGameController(%d) == 0\n", jsi);
+			continue;
+		}
+		controller = SDL_GameControllerOpen(jsi);
+		ctx->players[player].controller = controller;
+		debug(0, "ctx->players[%u].controller = %p\n", player,
+		      (void *)controller);
+
+		joystick = SDL_GameControllerGetJoystick(controller);
+		rumble = SDL_HapticOpenFromJoystick(joystick);
+		if (SDL_HapticRumbleInit(rumble)) {
+			ctx->players[player].rumble = rumble;
+		} else {
+			SDL_HapticClose(rumble);
+		}
+
+		++player;
+	}
+}
+
+internal void sdl_close_joysticks(struct sdl_event_context *ctx)
+{
+	unsigned int i;
+
+	for (i = 0; i < MAX_CONTROLLERS; ++i) {
+		if (ctx->players[i].controller) {
+			if (ctx->players[i].rumble) {
+				SDL_HapticClose(ctx->players[i].rumble);
+			}
+			SDL_GameControllerClose(ctx->players[i].controller);
+		}
+	}
+}
+
+internal void process_button(const struct game_button_state *old_state,
+			     struct game_button_state *new_state,
+			     SDL_GameController * controller,
+			     SDL_GameControllerButton button)
+{
+	new_state->ended_down = SDL_GameControllerGetButton(controller, button);
+	if (new_state->ended_down == old_state->ended_down) {
+		++new_state->half_transition_count;
+	}
+}
+
+internal void process_joysticks(struct sdl_event_context *ctx,
+				struct human_input *old_input,
+				struct human_input *new_input)
+{
+	unsigned int i;
+	struct game_controller_input *old_controller_input,
+	    *new_controller_input;
+	int stick_x, stick_y;
+	/* DPAD
+	   unsigned int up, down, left, right, start, back;
+	 */
+
+	for (i = 0; i < MAX_CONTROLLERS; ++i) {
+		if (!(ctx->players[i].controller)) {
+			continue;
+		}
+		if (!SDL_GameControllerGetAttached(ctx->players[i].controller)) {
+			continue;
+		}
+		old_controller_input = &old_input->controllers[i];
+		new_controller_input = &new_input->controllers[i];
+
+		new_controller_input->is_analog = 1;
+		/*
+		   up = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_DPAD_UP);
+		   down = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+		   left = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+		   right = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+		   start = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_START);
+		   back = SDL_GameControllerGetButton(ctx->players[i].controller,
+		   SDL_CONTROLLER_BUTTON_BACK);
+		 */
+
+		process_button(&
+			       (old_controller_input->but_u.
+				six_buttons.l_shoulder),
+			       &(new_controller_input->but_u.
+				 six_buttons.l_shoulder),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+		process_button(&
+			       (old_controller_input->but_u.
+				six_buttons.r_shoulder),
+			       &(new_controller_input->but_u.
+				 six_buttons.r_shoulder),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+		process_button(&(old_controller_input->but_u.six_buttons.down),
+			       &(new_controller_input->but_u.six_buttons.down),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_A);
+		process_button(&(old_controller_input->but_u.six_buttons.right),
+			       &(new_controller_input->but_u.six_buttons.right),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_B);
+		process_button(&(old_controller_input->but_u.six_buttons.left),
+			       &(new_controller_input->but_u.six_buttons.left),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_X);
+		process_button(&(old_controller_input->but_u.six_buttons.up),
+			       &(new_controller_input->but_u.six_buttons.up),
+			       ctx->players[i].controller,
+			       SDL_CONTROLLER_BUTTON_Y);
+
+		stick_x =
+		    SDL_GameControllerGetAxis(ctx->players[i].controller,
+					      SDL_CONTROLLER_AXIS_LEFTX);
+		stick_y =
+		    SDL_GameControllerGetAxis(ctx->players[i].controller,
+					      SDL_CONTROLLER_AXIS_LEFTY);
+
+		if (stick_x < 0) {
+			new_controller_input->end_x = stick_x / -32768.0f;
+		} else {
+			new_controller_input->end_x = stick_x / -32767.0f;
+		}
+		new_controller_input->min_x = new_controller_input->max_x =
+		    new_controller_input->end_x;
+
+		if (stick_y < 0) {
+			new_controller_input->end_y = stick_y / -32768.0f;
+		} else {
+			new_controller_input->end_y = stick_y / -32767.0f;
+		}
+		new_controller_input->min_y = new_controller_input->max_y =
+		    new_controller_input->end_y;
+	}
+
 }
 
 int main(int argc, char *argv[])
@@ -895,7 +1061,10 @@ int main(int argc, char *argv[])
 	struct game_memory mem;
 	struct pixel_buffer *virtual_win;
 	struct pixel_buffer blit_buf;
-	struct human_input input;
+	struct human_input input[2];
+	struct human_input *tmp_input;
+	struct human_input *new_input;
+	struct human_input *old_input;
 	struct sdl_texture_buffer texture_buf;
 	struct sdl_event_context event_ctx;
 	struct audio_ring_buffer audio_ring_buf;
@@ -906,7 +1075,10 @@ int main(int argc, char *argv[])
 	texture_buf.texture = NULL;
 	texture_buf.pixel_buf = &blit_buf;
 
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
+	flags =
+	    SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER |
+	    SDL_INIT_HAPTIC;
+	if (SDL_Init(flags) != 0) {
 		return 1;
 	}
 
@@ -933,6 +1105,8 @@ int main(int argc, char *argv[])
 	if (!virtual_win) {
 		debug(0, "did not assign virtual_win\n");
 	}
+
+	sdl_init_joysticks(&event_ctx);
 
 	title = (argc > 1) ? argv[1] : "Handmaiden Hero";
 	x = SDL_WINDOWPOS_UNDEFINED;
@@ -988,14 +1162,24 @@ int main(int argc, char *argv[])
 	frames_since_print = 0;
 	frame_count = 0;
 	shutdown = 0;
+	old_input = &input[0];
+	new_input = &input[1];
+	init_input(old_input);
+	init_input(new_input);
 	while (!shutdown) {
-		init_input(&input);
+		tmp_input = new_input;
+		new_input = old_input;
+		old_input = tmp_input;
+		init_input(new_input);
+
 		while (SDL_PollEvent(&event)) {
-			if ((shutdown = process_event(&event_ctx, &input))) {
+			if ((shutdown = process_event(&event_ctx, new_input))) {
 				break;
 			}
 		}
-		if (shutdown || (shutdown = process_input(&mem, &input))) {
+		process_joysticks(&event_ctx, old_input, new_input);
+
+		if (shutdown || (shutdown = process_input(&mem, new_input))) {
 			break;
 		}
 		update_pixel_buffer(&mem, &virtual_win);
@@ -1046,6 +1230,7 @@ int main(int argc, char *argv[])
 		SDL_CloseAudioDevice(sdl_audio_dev);
 	}
 	close_audio_debug_logging(&audio_ring_buf);
+	sdl_close_joysticks(&event_ctx);
 
 	/* we probably do not need to do these next steps */
 	if (HANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY) {

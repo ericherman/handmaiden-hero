@@ -66,7 +66,7 @@ void init_game(struct game_memory *mem, unsigned int default_volume,
 		if (error) {
 			/* TODO log? */
 		}
-		DEBUG_platform_free_file_memory(mem, size);
+		DEBUG_platform_free_file_memory(file_contents, size);
 	}
 }
 
@@ -224,13 +224,19 @@ unsigned int input_as_string(struct human_input *input, char *buf,
 
 int process_input(struct game_memory *mem, struct human_input *input)
 {
-
 	struct game_context *ctx;
+	struct game_controller_input *input0;
 
 	ctx = (struct game_context *)mem->fixed_memory;
 
 	if (input->esc.is_down) {
 		return 1;
+	}
+
+	input0 = &input->controllers[0];
+	if (input0->is_analog) {
+		ctx->x_shift += (int)(4.0f * input0->end_x);
+		ctx->y_shift += (int)(4.0f * input0->end_y);
 	}
 
 	if (input->space.is_down) {

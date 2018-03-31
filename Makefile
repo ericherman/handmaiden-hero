@@ -6,6 +6,7 @@ DBUG_CFLAGS=-O0 -march=native -ggdb \
  -D_GNU_SOURCE \
  -DERIC_DEBUG=1 \
  -DDEBUG_LOG_AUDIO=1 \
+ -DHANDMAIDEN_TRY_TO_MAKE_VALGRIND_HAPPY=1 \
  -rdynamic
 else
 CSTD_CFLAGS=-std=c89 -pedantic
@@ -33,12 +34,12 @@ clean:
 	rm -rf build
 	mkdir -p build
 
-handmaiden:
+handmaiden: src/handmaiden.h src/handmaiden.c
 	gcc -c $(CFLAGS) \
 		-o build/handmaiden.o \
 		src/handmaiden.c
 
-sdl-handmaiden: handmaiden
+sdl-handmaiden: handmaiden src/sdl_handmaiden.c
 	gcc $(CFLAGS) \
 		$(SDL2_CFLAGS) \
 		-o build/sdl-handmaiden \
